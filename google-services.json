@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "411206037583",
+    "project_id": "zerotrap-d81fd",
+    "storage_bucket": "zerotrap-d81fd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:411206037583:android:9d03c60e6f43d08d5dfa3a",
+        "android_client_info": {
+          "package_name": "com.zerotrap.emergency"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCR34xAzwjLJAmsbIbBXuC_udV2rbQwgMo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

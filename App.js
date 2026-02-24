@@ -1,20 +1,44 @@
+import React, { useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import AppNavigator from './navigation/AppNavigator';
+import {
+  requestNotificationPermission,
+  setupNotificationListeners,
+  removeNotificationListeners
+} from './services/notificationService';
 
 export default function App() {
+  const listenersRef = useRef(null);
+
+  useEffect(() => {
+    setupNotifications();
+    return () => {
+      if (listenersRef.current) {
+        removeNotificationListeners(listenersRef.current);
+      }
+    };
+  }, []);
+
+  const setupNotifications = async () => {
+    const result = await requestNotificationPermission();
+    if (result.success) {
+      console.log('Notifications ready');
+    }
+
+    listenersRef.current = setupNotificationListeners(
+      (notification) => {
+        console.log('Notification received:', notification.request.content.data);
+      },
+      (response) => {
+        console.log('Notification tapped:', response.notification.request.content.data);
+      }
+    );
+  };
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <>
+      <StatusBar style="auto" backgroundColor="#FF3B30" />
+      <AppNavigator />
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
