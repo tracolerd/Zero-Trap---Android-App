@@ -46,7 +46,8 @@
           "locationAlwaysAndWhenInUsePermission": "Zero Trap needs your location for emergency help requests.",
           "isAndroidBackgroundLocationEnabled": true
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "extra": {
       "eas": {
