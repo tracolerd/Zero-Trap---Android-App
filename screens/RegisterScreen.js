@@ -1,3 +1,6 @@
+// screens/RegisterScreen.js
+// Registration with Unique Username
+
 import React, { useState } from 'react';
 import {
   View,
@@ -13,9 +16,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { registerWithEmail, validateGmail } from '../services/firebaseAuthService';
+import { checkUsernameAvailability } from '../services/firestoreService';
 
 const RegisterScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
@@ -23,11 +28,42 @@ const RegisterScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState(null); // 'available', 'taken', 'invalid'
 
   const getPasswordStrength = (pass) => {
     if (pass.length < 6) return { strength: 'weak', color: '#FF3B30', text: 'দুর্বল' };
     if (pass.length < 8) return { strength: 'medium', color: '#FF9500', text: 'মাঝারি' };
     return { strength: 'strong', color: '#34C759', text: 'শক্তিশালী' };
+  };
+
+  const validateUsername = (text) => {
+    // Only lowercase letters, numbers, underscore, dot
+    // 3-20 characters
+    const usernameRegex = /^[a-z0-9_.]{3,20}$/;
+    return usernameRegex.test(text);
+  };
+
+  const handleUsernameChange = async (text) => {
+    const cleanText = text.toLowerCase().trim();
+    setUsername(cleanText);
+
+    if (cleanText.length < 3) {
+      setUsernameStatus(null);
+      return;
+    }
+
+    if (!validateUsername(cleanText)) {
+      setUsernameStatus('invalid');
+      return;
+    }
+
+    // Check availability
+    setCheckingUsername(true);
+    const isAvailable = await checkUsernameAvailability(cleanText);
+    setCheckingUsername(false);
+
+    setUsernameStatus(isAvailable ? 'available' : 'taken');
   };
 
   const handleRegister = async () => {
@@ -39,6 +75,24 @@ const RegisterScreen = ({ navigation }) => {
 
     if (!validateGmail(email.trim())) {
       Alert.alert('Error', 'শুধুমাত্র Gmail address দিয়ে register করতে পারবেন (@gmail.com)');
+      return;
+    }
+
+    if (!username.trim()) {
+      Alert.alert('Error', 'Username দিন');
+      return;
+    }
+
+    if (!validateUsername(username.trim())) {
+      Alert.alert(
+        'Invalid Username',
+        'Username এ শুধু lowercase letters, numbers, underscore (_), dot (.) use করতে পারবেন। 3-20 characters।'
+      );
+      return;
+    }
+
+    if (usernameStatus !== 'available') {
+      Alert.alert('Error', 'Username available না। অন্য username try করুন।');
       return;
     }
 
@@ -68,6 +122,7 @@ const RegisterScreen = ({ navigation }) => {
       email.trim().toLowerCase(),
       password,
       name.trim(),
+      username.trim().toLowerCase(),
       gender
     );
 
@@ -79,7 +134,7 @@ const RegisterScreen = ({ navigation }) => {
         result.message,
         [
           {
-            text: 'OK',
+            text: 'শুরু করি',
             onPress: () => navigation.replace('Home')
           }
         ]
@@ -128,6 +183,45 @@ const RegisterScreen = ({ navigation }) => {
               />
               <Text style={styles.helperText}>
                 শুধুমাত্র Gmail (@gmail.com) address use করুন
+              </Text>
+            </View>
+
+            {/* Username Input */}
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>👤 Username (Unique)</Text>
+              <View style={styles.usernameInputContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="username (e.g., john_doe)"
+                  value={username}
+                  onChangeText={handleUsernameChange}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {checkingUsername && (
+                  <ActivityIndicator size="small" color="#FF3B30" style={styles.usernameIndicator} />
+                )}
+              </View>
+              
+              {/* Username Status */}
+              {username.length >= 3 && usernameStatus === 'available' && (
+                <View style={styles.usernameStatusAvailable}>
+                  <Text style={styles.usernameStatusText}>✓ Username available!</Text>
+                </View>
+              )}
+              {username.length >= 3 && usernameStatus === 'taken' && (
+                <View style={styles.usernameStatusTaken}>
+                  <Text style={styles.usernameStatusText}>✗ Username already taken</Text>
+                </View>
+              )}
+              {username.length >= 3 && usernameStatus === 'invalid' && (
+                <View style={styles.usernameStatusInvalid}>
+                  <Text style={styles.usernameStatusText}>✗ Invalid format</Text>
+                </View>
+              )}
+              
+              <Text style={styles.helperText}>
+                Lowercase letters, numbers, underscore (_), dot (.) only। 3-20 characters
               </Text>
             </View>
 
@@ -212,9 +306,9 @@ const RegisterScreen = ({ navigation }) => {
 
             {/* Register Button */}
             <TouchableOpacity
-              style={[styles.registerButton, loading && styles.buttonDisabled]}
+              style={[styles.registerButton, (loading || usernameStatus !== 'available') && styles.buttonDisabled]}
               onPress={handleRegister}
-              disabled={loading}
+              disabled={loading || usernameStatus !== 'available'}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />
@@ -260,12 +354,12 @@ const styles = StyleSheet.create({
   },
   backButton: { fontSize: 16, color: '#FF3B30', fontWeight: '600' },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#000' },
-  logoSection: { alignItems: 'center', paddingVertical: 20, marginBottom: 20 },
+  logoSection: { alignItems: 'center', paddingVertical: 20 },
   logo: { fontSize: 60, marginBottom: 10 },
   appName: { fontSize: 28, fontWeight: 'bold', color: '#FF3B30', marginBottom: 5 },
-  tagline: { fontSize: 14, color: '#666' },
+  tagline: { fontSize: 14, color: '#666', marginBottom: 10 },
   formSection: { marginBottom: 20 },
-  inputWrapper: { marginBottom: 20 },
+  inputWrapper: { marginBottom: 18 },
   inputLabel: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
   input: {
     borderWidth: 2,
@@ -276,6 +370,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9F9F9',
     color: '#000',
   },
+  usernameInputContainer: { position: 'relative' },
+  usernameIndicator: { position: 'absolute', right: 15, top: 17 },
+  usernameStatusAvailable: {
+    backgroundColor: '#E8F5E9',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 5,
+  },
+  usernameStatusTaken: {
+    backgroundColor: '#FFEBEE',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 5,
+  },
+  usernameStatusInvalid: {
+    backgroundColor: '#FFF3CD',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 5,
+  },
+  usernameStatusText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   helperText: { fontSize: 12, color: '#999', marginTop: 5, fontStyle: 'italic' },
   passwordContainer: {
     flexDirection: 'row',

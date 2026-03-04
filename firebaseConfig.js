@@ -1,9 +1,10 @@
 // firebaseConfig.js
-// Firebase Web SDK with Email Authentication
+// Firebase Web SDK with Storage + Auth + Firestore
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { getStorage } from 'firebase/storage';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -21,5 +22,15 @@ const app = initializeApp(firebaseConfig);
 // Initialize Services
 const db = getFirestore(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
 
-export { app, db, auth };
+// Enable offline persistence
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    console.log('Persistence failed: Multiple tabs open');
+  } else if (err.code === 'unimplemented') {
+    console.log('Persistence not available');
+  }
+});
+
+export { app, db, auth, storage };

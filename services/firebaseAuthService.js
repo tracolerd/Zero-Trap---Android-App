@@ -1,5 +1,5 @@
 // services/firebaseAuthService.js
-// Firebase Email Authentication ONLY - Simple & FREE!
+// Authentication Service with Username Support
 
 import {
   createUserWithEmailAndPassword,
@@ -7,17 +7,23 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   signOut as firebaseSignOut,
-  updateProfile
+  updateProfile,
+  onAuthStateChanged
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
-import { auth, db } from '../firebaseConfig';
-import { saveUserData, clearUserData } from './storageService';
+import { auth } from '../firebaseConfig';
+import {
+  createUserProfile,
+  getUserProfile,
+  updateUserProfile,
+  setUserOnlineStatus
+} from './firestoreService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ============================================
-// REGISTER with Email (Gmail)
+// REGISTER with Email + Username
 // ============================================
 
-export const registerWithEmail = async (email, password, name, gender) => {
+export const registerWithEmail = async (email, password, name, username, gender) => {
   try {
     // Validate Gmail only
     if (!email.toLowerCase().endsWith('@gmail.com')) {
@@ -37,12 +43,13 @@ export const registerWithEmail = async (email, password, name, gender) => {
     // Send email verification
     await sendEmailVerification(user);
 
-    // Create user profile in Firestore
+    // Create Firestore profile with username
     const userData = {
       userId: user.uid,
+      username: username.toLowerCase(),
       name: name,
       email: email,
-      phoneNumber: '', // Optional - can add later in profile
+      phoneNumber: '',
       gender: gender,
       profileImage: '',
       emailVerified: false,
@@ -50,26 +57,33 @@ export const registerWithEmail = async (email, password, name, gender) => {
       helpingScore: 0,
       totalHelped: 0,
       lastHelped: null,
+      isOnline: true,
+      blockedUsers: [],
       registeredAt: new Date().toISOString(),
-      isLoggedIn: true
+      accountCreatedAt: Date.now() // For sorting
     };
 
     // Save to Firestore
-    await setDoc(doc(db, 'users', user.uid), userData);
+    const result = await createUserProfile(user.uid, userData);
 
-    // Save to local storage
-    await saveUserData(userData);
+    if (!result.success) {
+      // Rollback: Delete auth user if Firestore fails
+      await user.delete();
+      return {
+        success: false,
+        error: 'Failed to create profile. Please try again.'
+      };
+    }
 
     return {
       success: true,
-      userData: userData,
-      message: '✅ Account তৈরি হয়েছে!\n\n📧 Verification email পাঠানো হয়েছে। Email inbox check করুন।'
+      userData: result.data,
+      message: '✅ Account তৈরি হয়েছে!\n\n📧 Verification email পাঠানো হয়েছে। Inbox check করুন।'
     };
 
   } catch (error) {
     console.error('Register error:', error);
 
-    // User-friendly error messages
     let errorMessage = 'Registration failed। আবার try করুন।';
 
     if (error.code === 'auth/email-already-in-use') {
@@ -88,7 +102,7 @@ export const registerWithEmail = async (email, password, name, gender) => {
 };
 
 // ============================================
-// LOGIN with Email
+// LOGIN with Email + Sync Firestore
 // ============================================
 
 export const loginWithEmail = async (email, password) => {
@@ -97,22 +111,26 @@ export const loginWithEmail = async (email, password) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Get user data from Firestore
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    // Get user profile from Firestore
+    const profileResult = await getUserProfile(user.uid);
 
-    if (!userDoc.exists()) {
+    if (!profileResult.success) {
       return {
         success: false,
-        error: 'User data not found। Support এ contact করুন।'
+        error: 'Profile not found। Support এ contact করুন।'
       };
     }
 
-    const userData = userDoc.data();
-    userData.isLoggedIn = true;
-    userData.emailVerified = user.emailVerified;
+    const userData = profileResult.data;
 
-    // Save to local storage
-    await saveUserData(userData);
+    // Update online status
+    await setUserOnlineStatus(user.uid, true);
+
+    // Update local cache
+    await AsyncStorage.setItem('currentUser', JSON.stringify({
+      ...userData,
+      emailVerified: user.emailVerified
+    }));
 
     return {
       success: true,
@@ -133,6 +151,8 @@ export const loginWithEmail = async (email, password) => {
       errorMessage = 'Invalid email address।';
     } else if (error.code === 'auth/too-many-requests') {
       errorMessage = 'অনেকবার ভুল password দিয়েছেন। কিছুক্ষণ পর try করুন।';
+    } else if (error.code === 'auth/network-request-failed') {
+      errorMessage = 'Network error। Internet connection check করুন।';
     }
 
     return {
@@ -143,39 +163,59 @@ export const loginWithEmail = async (email, password) => {
 };
 
 // ============================================
-// RESEND Email Verification
+// AUTH STATE LISTENER
 // ============================================
 
-export const resendVerificationEmail = async () => {
+export const subscribeToAuthChanges = (callback) => {
+  return onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      // User signed in
+      const profileResult = await getUserProfile(user.uid);
+      
+      if (profileResult.success) {
+        await setUserOnlineStatus(user.uid, true);
+        callback({
+          isAuthenticated: true,
+          user: profileResult.data
+        });
+      }
+    } else {
+      // User signed out
+      await AsyncStorage.removeItem('currentUser');
+      callback({
+        isAuthenticated: false,
+        user: null
+      });
+    }
+  });
+};
+
+// ============================================
+// SIGN OUT + Update Status
+// ============================================
+
+export const signOut = async () => {
   try {
     const user = auth.currentUser;
-
-    if (!user) {
-      return {
-        success: false,
-        error: 'No user logged in'
-      };
+    
+    if (user) {
+      // Set offline before signing out
+      await setUserOnlineStatus(user.uid, false);
     }
 
-    if (user.emailVerified) {
-      return {
-        success: false,
-        error: 'Email already verified!'
-      };
-    }
-
-    await sendEmailVerification(user);
+    await firebaseSignOut(auth);
+    await AsyncStorage.removeItem('currentUser');
 
     return {
       success: true,
-      message: '✅ Verification email পাঠানো হয়েছে! Inbox check করুন।'
+      message: 'Signed out successfully'
     };
 
   } catch (error) {
-    console.error('Resend verification error:', error);
+    console.error('Sign out error:', error);
     return {
       success: false,
-      error: 'Failed to send verification email।'
+      error: 'Sign out failed'
     };
   }
 };
@@ -212,30 +252,71 @@ export const sendPasswordReset = async (email) => {
 };
 
 // ============================================
-// SIGN OUT
+// EMAIL VERIFICATION
 // ============================================
 
-export const signOut = async () => {
+export const resendVerificationEmail = async () => {
   try {
-    await firebaseSignOut(auth);
-    await clearUserData();
+    const user = auth.currentUser;
+
+    if (!user) {
+      return {
+        success: false,
+        error: 'No user logged in'
+      };
+    }
+
+    if (user.emailVerified) {
+      return {
+        success: false,
+        error: 'Email already verified!'
+      };
+    }
+
+    await sendEmailVerification(user);
 
     return {
       success: true,
-      message: 'Signed out successfully'
+      message: '✅ Verification email পাঠানো হয়েছে! Inbox check করুন।'
     };
 
   } catch (error) {
-    console.error('Sign out error:', error);
+    console.error('Resend verification error:', error);
     return {
       success: false,
-      error: 'Sign out failed'
+      error: 'Failed to send verification email।'
     };
   }
 };
 
+export const checkEmailVerification = async () => {
+  try {
+    const user = auth.currentUser;
+
+    if (!user) {
+      return { verified: false };
+    }
+
+    // Reload user to get latest status
+    await user.reload();
+
+    // Update Firestore if verified
+    if (user.emailVerified) {
+      await updateUserProfile(user.uid, { emailVerified: true });
+    }
+
+    return {
+      verified: user.emailVerified
+    };
+
+  } catch (error) {
+    console.error('Check verification error:', error);
+    return { verified: false };
+  }
+};
+
 // ============================================
-// DELETE ACCOUNT (Permanent)
+// DELETE ACCOUNT
 // ============================================
 
 export const deleteAccount = async () => {
@@ -249,14 +330,11 @@ export const deleteAccount = async () => {
       };
     }
 
-    // Delete Firestore data
-    await deleteDoc(doc(db, 'users', user.uid));
-
     // Delete Firebase Auth user
     await user.delete();
 
     // Clear local storage
-    await clearUserData();
+    await AsyncStorage.clear();
 
     return {
       success: true,
@@ -281,34 +359,17 @@ export const deleteAccount = async () => {
 };
 
 // ============================================
-// CHECK EMAIL VERIFICATION STATUS
-// ============================================
-
-export const checkEmailVerification = async () => {
-  try {
-    const user = auth.currentUser;
-
-    if (!user) {
-      return { verified: false };
-    }
-
-    // Reload user to get latest status
-    await user.reload();
-
-    return {
-      verified: user.emailVerified
-    };
-
-  } catch (error) {
-    console.error('Check verification error:', error);
-    return { verified: false };
-  }
-};
-
-// ============================================
-// VALIDATE GMAIL
+// UTILITY FUNCTIONS
 // ============================================
 
 export const validateGmail = (email) => {
   return email && email.toLowerCase().endsWith('@gmail.com');
+};
+
+export const getCurrentUser = () => {
+  return auth.currentUser;
+};
+
+export const getCurrentUserId = () => {
+  return auth.currentUser?.uid || null;
 };

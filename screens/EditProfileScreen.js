@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+// screens/EditProfileScreen.js
+// Cloud-Synced Edit Profile with Image Upload
+
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,255 +9,438 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Image,
   Alert,
   ActivityIndicator,
-  Image,
-  KeyboardAvoidingView,
   Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { updateUserData } from '../services/storageService';
+import { getCurrentUser } from '../services/firebaseAuthService';
+import {
+  getUserProfile,
+  updateUserProfile,
+  uploadProfileImage,
+  deleteProfileImage
+} from '../services/firestoreService';
 
-const EditProfileScreen = ({ navigation, route }) => {
-  const currentData = route.params?.userData || {};
+const EditProfileScreen = ({ navigation }) => {
+  const [userData, setUserData] = useState(null);
+  const [name, setName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [gender, setGender] = useState('');
+  const [profileImage, setProfileImage] = useState('');
+  const [imageChanged, setImageChanged] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  const [name, setName] = useState(currentData.name || '');
-  const [email, setEmail] = useState(currentData.email || '');
-  const [gender, setGender] = useState(currentData.gender || '');
-  const [profileImage, setProfileImage] = useState(currentData.profileImage || null);
-  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    loadUserProfile();
+    requestPermissions();
+  }, []);
 
-  const handlePickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Gallery access permission দিন');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
-
-    if (!result.canceled) {
-      setProfileImage(result.assets[0].uri);
+  const requestPermissions = async () => {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Camera roll permission দরকার profile picture update করতে।'
+        );
+      }
     }
   };
 
+  const loadUserProfile = async () => {
+    const user = getCurrentUser();
+    
+    if (!user) {
+      navigation.replace('Login');
+      return;
+    }
+
+    const result = await getUserProfile(user.uid);
+    
+    if (result.success) {
+      const data = result.data;
+      setUserData(data);
+      setName(data.name || '');
+      setPhoneNumber(data.phoneNumber || '');
+      setGender(data.gender || '');
+      setProfileImage(data.profileImage || '');
+    }
+    
+    setLoading(false);
+  };
+
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+      });
+
+      if (!result.canceled) {
+        setProfileImage(result.assets[0].uri);
+        setImageChanged(true);
+      }
+    } catch (error) {
+      console.error('Image picker error:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const removeImage = () => {
+    Alert.alert(
+      'Remove Profile Picture',
+      'আপনি কি নিশ্চিত profile picture মুছতে চান?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            setProfileImage('');
+            setImageChanged(true);
+          }
+        }
+      ]
+    );
+  };
+
   const handleSave = async () => {
+    // Validation
     if (!name.trim()) {
-      Alert.alert('Error', 'আপনার নাম দিন');
+      Alert.alert('Error', 'নাম দিন');
       return;
     }
 
     if (!gender) {
-      Alert.alert('Error', 'Gender সিলেক্ট করুন');
+      Alert.alert('Error', 'Gender select করুন');
       return;
     }
 
-    // Validate email if provided and if register method is phone
-    if (email.trim() && currentData.registerMethod === 'phone') {
-      if (!email.toLowerCase().endsWith('@gmail.com')) {
-        Alert.alert('Error', 'শুধুমাত্র Gmail (@gmail.com) allowed');
+    // Validate phone number (optional but if provided, must be valid)
+    if (phoneNumber.trim()) {
+      const phoneRegex = /^[0-9]{10,11}$/;
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
+      
+      if (!phoneRegex.test(cleanPhone)) {
+        Alert.alert(
+          'Invalid Phone Number',
+          'সঠিক phone number দিন (10-11 digits)'
+        );
         return;
       }
     }
 
-    setLoading(true);
+    setSaving(true);
 
+    const user = getCurrentUser();
+    
     try {
-      const result = await updateUserData({
-        name: name.trim(),
-        email: email.trim(),
-        gender,
-        profileImage
-      });
+      // Upload image if changed
+      let imageUrl = profileImage;
+      
+      if (imageChanged) {
+        if (profileImage && profileImage.startsWith('file://')) {
+          // New image selected
+          setUploading(true);
+          const uploadResult = await uploadProfileImage(user.uid, profileImage);
+          setUploading(false);
+          
+          if (uploadResult.success) {
+            imageUrl = uploadResult.url;
+          } else {
+            throw new Error('Image upload failed');
+          }
+        } else if (!profileImage && userData.profileImage) {
+          // Image removed
+          await deleteProfileImage(user.uid, userData.profileImage);
+          imageUrl = '';
+        }
+      }
 
-      setLoading(false);
+      // Update profile
+      const updates = {
+        name: name.trim(),
+        phoneNumber: phoneNumber.trim(),
+        gender: gender,
+        profileImage: imageUrl
+      };
+
+      const result = await updateUserProfile(user.uid, updates);
 
       if (result.success) {
-        Alert.alert('✅ Success', 'Profile updated successfully!', [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]);
+        Alert.alert(
+          '✅ সফল!',
+          'Profile update হয়েছে!',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack()
+            }
+          ]
+        );
       } else {
-        throw new Error('Update failed');
+        throw new Error(result.error);
       }
+
     } catch (error) {
-      setLoading(false);
-      Alert.alert('Error', error.message);
+      console.error('Save profile error:', error);
+      Alert.alert('Error', 'Profile update failed। আবার try করুন।');
+    } finally {
+      setSaving(false);
     }
   };
 
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF3B30" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← Cancel</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Profile</Text>
-          <TouchableOpacity onPress={handleSave} disabled={loading}>
-            {loading
-              ? <ActivityIndicator size="small" color="#FF3B30" />
-              : <Text style={styles.saveTopButton}>Save</Text>
-            }
-          </TouchableOpacity>
-        </View>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backButton}>← Cancel</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <TouchableOpacity
+          onPress={handleSave}
+          disabled={saving || uploading}
+        >
+          <Text style={[styles.saveButton, (saving || uploading) && styles.saveButtonDisabled]}>
+            {saving || uploading ? 'Saving...' : 'Save'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          {/* Profile Image */}
-          <TouchableOpacity style={styles.imageContainer} onPress={handlePickImage}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Profile Picture */}
+        <View style={styles.profilePictureSection}>
+          <TouchableOpacity onPress={pickImage}>
             {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.profileImage} />
+              <Image
+                source={{ uri: profileImage }}
+                style={styles.profilePicture}
+              />
             ) : (
-              <View style={styles.imagePlaceholder}>
-                <Text style={styles.imagePlaceholderText}>
-                  {name ? name[0].toUpperCase() : '📷'}
+              <View style={styles.profilePicturePlaceholder}>
+                <Text style={styles.profilePicturePlaceholderText}>
+                  {name ? name[0].toUpperCase() : '+'}
                 </Text>
               </View>
             )}
-            <View style={styles.editBadge}>
-              <Text style={styles.editBadgeText}>📷</Text>
+            <View style={styles.cameraButton}>
+              <Text style={styles.cameraIcon}>📷</Text>
             </View>
           </TouchableOpacity>
-          <Text style={styles.changePhotoText}>Tap to change photo</Text>
 
-          {/* Name */}
-          <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabel}>👤 নাম *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="আপনার পুরো নাম"
-              value={name}
-              onChangeText={setName}
-            />
-          </View>
-
-          {/* Email (only if registered with phone) */}
-          {currentData.registerMethod === 'phone' && (
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>📧 Gmail (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="your@gmail.com"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-              <Text style={styles.inputHint}>শুধুমাত্র @gmail.com supported</Text>
+          {uploading && (
+            <View style={styles.uploadingOverlay}>
+              <ActivityIndicator color="#FFFFFF" size="large" />
+              <Text style={styles.uploadingText}>Uploading...</Text>
             </View>
           )}
 
-          {/* Phone/Email display (readonly) */}
-          <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabel}>
-              {currentData.registerMethod === 'gmail' ? '📧 Gmail' : '📱 Phone'}
-            </Text>
-            <View style={styles.readonlyInput}>
-              <Text style={styles.readonlyText}>
-                {currentData.registerMethod === 'gmail'
-                  ? currentData.email
-                  : currentData.phoneNumber}
-              </Text>
-              <Text style={styles.readonlyBadge}>🔒 Fixed</Text>
-            </View>
-            <Text style={styles.inputHint}>Login identifier পরিবর্তন করা যাবে না</Text>
-          </View>
+          {profileImage && (
+            <TouchableOpacity
+              style={styles.removeImageButton}
+              onPress={removeImage}
+            >
+              <Text style={styles.removeImageText}>Remove Picture</Text>
+            </TouchableOpacity>
+          )}
 
-          {/* Gender */}
-          <View style={styles.inputWrapper}>
-            <Text style={styles.inputLabel}>⚧ Gender *</Text>
-            <View style={styles.genderContainer}>
-              {['Male', 'Female', 'Other'].map((g) => (
-                <TouchableOpacity
-                  key={g}
-                  style={[styles.genderButton, gender === g && styles.genderButtonActive]}
-                  onPress={() => setGender(g)}
+          <Text style={styles.imageHint}>
+            Tap to change profile picture
+          </Text>
+        </View>
+
+        {/* Name */}
+        <View style={styles.inputWrapper}>
+          <Text style={styles.inputLabel}>👤 Name *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="আপনার নাম লিখুন"
+            value={name}
+            onChangeText={setName}
+          />
+        </View>
+
+        {/* Phone Number */}
+        <View style={styles.inputWrapper}>
+          <Text style={styles.inputLabel}>📱 Phone Number</Text>
+          <View style={styles.phoneInputContainer}>
+            <View style={styles.countryCode}>
+              <Text style={styles.countryCodeText}>🇧🇩 +880</Text>
+            </View>
+            <TextInput
+              style={styles.phoneInput}
+              placeholder="1XXXXXXXXX"
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+              keyboardType="phone-pad"
+              maxLength={11}
+            />
+          </View>
+          <Text style={styles.phoneHint}>
+            ⚠️ Emergency situations এ অন্যরা আপনার number দেখতে পারবে
+          </Text>
+        </View>
+
+        {/* Gender */}
+        <View style={styles.inputWrapper}>
+          <Text style={styles.inputLabel}>⚧ Gender *</Text>
+          <View style={styles.genderContainer}>
+            {['Male', 'Female', 'Other'].map((g) => (
+              <TouchableOpacity
+                key={g}
+                style={[
+                  styles.genderButton,
+                  gender === g && styles.genderButtonActive
+                ]}
+                onPress={() => setGender(g)}
+              >
+                <Text
+                  style={[
+                    styles.genderButtonText,
+                    gender === g && styles.genderButtonTextActive
+                  ]}
                 >
-                  <Text style={[styles.genderText, gender === g && styles.genderTextActive]}>
-                    {g === 'Male' ? '👨 Male' : g === 'Female' ? '👩 Female' : '🧑 Other'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                  {g === 'Male' ? '👨 Male' : g === 'Female' ? '👩 Female' : '⚧ Other'}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
+        </View>
 
-          {/* Save Button */}
-          <TouchableOpacity
-            style={[styles.saveButton, loading && styles.buttonDisabled]}
-            onPress={handleSave}
-            disabled={loading}
-          >
-            {loading
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.saveButtonText}>Save Changes ✅</Text>
-            }
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        {/* Privacy Notice */}
+        <View style={styles.privacyNotice}>
+          <Text style={styles.privacyTitle}>🔒 Privacy & Safety</Text>
+          <Text style={styles.privacyText}>
+            • আপনার profile public হবে emergency help এর জন্য{'\n'}
+            • Phone number শুধু active help requests এ দেখা যাবে{'\n'}
+            • যেকোনো অপব্যবহার report/block করতে পারবেন{'\n'}
+            • Account যেকোনো সময় delete করতে পারবেন
+          </Text>
+        </View>
+
+        {/* Save Button */}
+        <TouchableOpacity
+          style={[styles.saveButtonLarge, (saving || uploading) && styles.buttonDisabled]}
+          onPress={handleSave}
+          disabled={saving || uploading}
+        >
+          {saving || uploading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.saveButtonLargeText}>💾 Save Changes</Text>
+          )}
+        </TouchableOpacity>
+
+        {/* Cloud Sync Info */}
+        <View style={styles.cloudInfo}>
+          <Text style={styles.cloudInfoText}>
+            ☁️ সব changes cloud এ automatically save হবে
+          </Text>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+  },
+  loadingText: { marginTop: 10, fontSize: 14, color: '#666' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    padding: 20,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
   },
   backButton: { fontSize: 16, color: '#FF3B30', fontWeight: '600' },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#000' },
-  saveTopButton: { fontSize: 16, color: '#007AFF', fontWeight: '600' },
-  scrollContent: { padding: 25, paddingBottom: 40 },
-  imageContainer: { alignSelf: 'center', marginBottom: 8, position: 'relative' },
-  profileImage: {
+  saveButton: { fontSize: 16, color: '#007AFF', fontWeight: 'bold' },
+  saveButtonDisabled: { color: '#999' },
+  scrollContent: { padding: 20, paddingBottom: 40 },
+  profilePictureSection: { alignItems: 'center', marginBottom: 30 },
+  profilePicture: {
     width: 120,
     height: 120,
     borderRadius: 60,
     borderWidth: 4,
     borderColor: '#FF3B30',
   },
-  imagePlaceholder: {
+  profilePicturePlaceholder: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#E5E5EA',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 4,
-    borderColor: '#FFB3AE',
+    borderColor: '#FFFFFF',
   },
-  imagePlaceholderText: { fontSize: 46, color: '#FFFFFF', fontWeight: 'bold' },
-  editBadge: {
+  profilePicturePlaceholderText: {
+    fontSize: 48,
+    color: '#999',
+    fontWeight: 'bold',
+  },
+  cameraButton: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#FFFFFF',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  editBadgeText: { fontSize: 16 },
-  changePhotoText: { textAlign: 'center', fontSize: 12, color: '#999', marginBottom: 25 },
-  inputWrapper: { marginBottom: 18 },
+  cameraIcon: { fontSize: 20 },
+  uploadingOverlay: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadingText: { color: '#FFFFFF', fontSize: 12, marginTop: 8 },
+  removeImageButton: {
+    marginTop: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: '#FFE5E5',
+    borderRadius: 15,
+  },
+  removeImageText: { fontSize: 12, color: '#FF3B30', fontWeight: '600' },
+  imageHint: { fontSize: 12, color: '#999', marginTop: 8 },
+  inputWrapper: { marginBottom: 20 },
   inputLabel: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
   input: {
     borderWidth: 2,
@@ -265,38 +451,56 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     color: '#000',
   },
-  inputHint: { fontSize: 11, color: '#999', marginTop: 5, marginLeft: 4 },
-  readonlyInput: {
+  phoneInputContainer: {
+    flexDirection: 'row',
     borderWidth: 2,
     borderColor: '#E5E5EA',
     borderRadius: 12,
-    padding: 15,
-    backgroundColor: '#F5F5F5',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
   },
-  readonlyText: { fontSize: 15, color: '#666' },
-  readonlyBadge: { fontSize: 12, color: '#999' },
+  countryCode: {
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRightWidth: 1,
+    borderRightColor: '#E5E5EA',
+  },
+  countryCodeText: { fontSize: 15, color: '#333', fontWeight: '600' },
+  phoneInput: { flex: 1, padding: 15, fontSize: 16, color: '#000' },
+  phoneHint: { fontSize: 11, color: '#FF9500', marginTop: 5, fontStyle: 'italic' },
   genderContainer: { flexDirection: 'row', gap: 10 },
   genderButton: {
     flex: 1,
-    paddingVertical: 13,
+    padding: 15,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: '#E5E5EA',
-    borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#F9F9F9',
+    backgroundColor: '#FFFFFF',
   },
-  genderButtonActive: { borderColor: '#FF3B30', backgroundColor: '#FFE5E5' },
-  genderText: { fontSize: 13, color: '#666', fontWeight: '600' },
-  genderTextActive: { color: '#FF3B30' },
-  saveButton: {
+  genderButtonActive: {
+    backgroundColor: '#FF3B30',
+    borderColor: '#FF3B30',
+  },
+  genderButtonText: { fontSize: 14, color: '#666', fontWeight: '600' },
+  genderButtonTextActive: { color: '#FFFFFF' },
+  privacyNotice: {
+    backgroundColor: '#E3F2FD',
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+  },
+  privacyTitle: { fontSize: 14, fontWeight: 'bold', color: '#1976D2', marginBottom: 8 },
+  privacyText: { fontSize: 12, color: '#666', lineHeight: 20 },
+  saveButtonLarge: {
     backgroundColor: '#FF3B30',
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 10,
+    marginBottom: 15,
     shadowColor: '#FF3B30',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -304,7 +508,9 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   buttonDisabled: { backgroundColor: '#FFB3AE', elevation: 0 },
-  saveButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: 'bold' },
+  saveButtonLargeText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  cloudInfo: { alignItems: 'center', paddingVertical: 10 },
+  cloudInfoText: { fontSize: 11, color: '#4CAF50', fontStyle: 'italic' },
 });
 
 export default EditProfileScreen;
