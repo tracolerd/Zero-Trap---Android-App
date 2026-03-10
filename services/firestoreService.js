@@ -1,5 +1,5 @@
 // services/firestoreService.js
-// Complete Firestore Service with Username Support
+// Complete Firestore Service - FINAL VERSION
 
 import {
   doc,
@@ -27,15 +27,48 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const checkUsernameAvailability = async (username) => {
   try {
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('username', '==', username.toLowerCase()));
-    const querySnapshot = await getDocs(q);
+    if (!username || username.trim() === '') {
+      console.log('❌ Username empty');
+      return false;
+    }
 
-    return querySnapshot.empty; // true if available
+    const cleanUsername = username.toLowerCase().trim();
+    
+    console.log('🔍 Checking username:', cleanUsername);
+
+    // Check in usernames collection (public read allowed)
+    const usernameRef = doc(db, 'usernames', cleanUsername);
+    const usernameSnap = await getDoc(usernameRef);
+
+    const isAvailable = !usernameSnap.exists();
+    
+    console.log(isAvailable ? '✅ Available!' : '❌ Taken!');
+
+    return isAvailable;
 
   } catch (error) {
-    console.error('Check username error:', error);
+    console.error('❌ Username check error:', error);
+    console.error('Error code:', error.code);
     return false;
+  }
+};
+
+export const createUsernameDocument = async (username, userId) => {
+  try {
+    const cleanUsername = username.toLowerCase().trim();
+    const usernameRef = doc(db, 'usernames', cleanUsername);
+    
+    await setDoc(usernameRef, {
+      userId: userId,
+      createdAt: new Date().toISOString()
+    });
+
+    console.log('✅ Username document created');
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ Create username error:', error);
+    return { success: false, error: error.message };
   }
 };
 
@@ -67,7 +100,7 @@ export const searchUserByUsername = async (username) => {
 export const getAllUsers = async () => {
   try {
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, orderBy('accountCreatedAt', 'asc')); // Oldest first
+    const q = query(usersRef, orderBy('accountCreatedAt', 'asc'));
     
     const querySnapshot = await getDocs(q);
     const users = [];
@@ -83,10 +116,6 @@ export const getAllUsers = async () => {
     return { success: false, error: error.message };
   }
 };
-
-// ============================================
-// SUBSCRIBE TO ALL USERS (Real-time)
-// ============================================
 
 export const subscribeToAllUsers = (callback) => {
   const usersRef = collection(db, 'users');
@@ -112,16 +141,6 @@ export const subscribeToAllUsers = (callback) => {
 export const createUserProfile = async (userId, userData) => {
   try {
     const userRef = doc(db, 'users', userId);
-    
-    // Check if username already exists
-    const usernameExists = await checkUsernameAvailability(userData.username);
-    
-    if (!usernameExists) {
-      return {
-        success: false,
-        error: 'Username already taken'
-      };
-    }
 
     const profileData = {
       ...userData,
@@ -134,12 +153,11 @@ export const createUserProfile = async (userId, userData) => {
       lastSeen: serverTimestamp(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      accountCreatedAt: Date.now() // For sorting
+      accountCreatedAt: Date.now()
     };
 
     await setDoc(userRef, profileData);
     
-    // Cache locally
     await AsyncStorage.setItem('currentUser', JSON.stringify(profileData));
     
     return { success: true, data: profileData };
@@ -160,14 +178,12 @@ export const getUserProfile = async (userId) => {
 
     const userData = { id: userSnap.id, ...userSnap.data() };
     
-    // Cache locally
     await AsyncStorage.setItem(`user_${userId}`, JSON.stringify(userData));
     
     return { success: true, data: userData };
   } catch (error) {
     console.error('Get profile error:', error);
     
-    // Try local cache
     const cached = await AsyncStorage.getItem(`user_${userId}`);
     if (cached) {
       return { success: true, data: JSON.parse(cached), fromCache: true };
@@ -188,7 +204,6 @@ export const updateUserProfile = async (userId, updates) => {
 
     await updateDoc(userRef, updateData);
     
-    // Update local cache
     const current = await AsyncStorage.getItem('currentUser');
     if (current) {
       const userData = JSON.parse(current);
@@ -209,20 +224,15 @@ export const updateUserProfile = async (userId, updates) => {
 
 export const uploadProfileImage = async (userId, imageUri) => {
   try {
-    // Convert image URI to blob
     const response = await fetch(imageUri);
     const blob = await response.blob();
 
-    // Create storage reference
     const imageRef = ref(storage, `profile_images/${userId}_${Date.now()}.jpg`);
 
-    // Upload image
     await uploadBytes(imageRef, blob);
 
-    // Get download URL
     const downloadURL = await getDownloadURL(imageRef);
 
-    // Update user profile
     await updateUserProfile(userId, { profileImage: downloadURL });
 
     return { success: true, url: downloadURL };
@@ -236,13 +246,10 @@ export const deleteProfileImage = async (userId, imageUrl) => {
   try {
     if (!imageUrl) return { success: true };
 
-    // Extract path from URL
     const imageRef = ref(storage, imageUrl);
     
-    // Delete from storage
     await deleteObject(imageRef);
 
-    // Update user profile
     await updateUserProfile(userId, { profileImage: '' });
 
     return { success: true };
@@ -297,7 +304,7 @@ export const createHelpRequest = async (requestData) => {
       status: 'active',
       helpers: [],
       createdAt: serverTimestamp(),
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000)
     };
 
     const docRef = await addDoc(helpRequestsRef, request);
@@ -384,7 +391,6 @@ export const completeHelpRequest = async (requestId, helperId) => {
       completedBy: helperId
     });
 
-    // Update helper's score
     const helperRef = doc(db, 'users', helperId);
     const helperSnap = await getDoc(helperRef);
     
@@ -478,7 +484,6 @@ export const sendMessage = async (chatId, senderId, senderName, message) => {
 
     await addDoc(messagesRef, messageData);
 
-    // Update chat metadata
     const chatRef = doc(db, 'chats', chatId);
     await setDoc(chatRef, {
       lastMessage: message,
@@ -526,7 +531,7 @@ export const reportUser = async (reporterId, reportedUserId, reason) => {
       createdAt: serverTimestamp()
     });
 
-    return { success: true, message: 'Report submitted successfully' };
+    return { success: true, message: 'Report submitted' };
   } catch (error) {
     console.error('Report user error:', error);
     return { success: false, error: error.message };

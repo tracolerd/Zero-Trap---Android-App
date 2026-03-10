@@ -1,5 +1,5 @@
 // services/firebaseAuthService.js
-// Authentication Service with Username Support
+// Complete Authentication Service - FINAL VERSION
 
 import {
   createUserWithEmailAndPassword,
@@ -15,7 +15,8 @@ import {
   createUserProfile,
   getUserProfile,
   updateUserProfile,
-  setUserOnlineStatus
+  setUserOnlineStatus,
+  createUsernameDocument
 } from './firestoreService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -25,7 +26,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const registerWithEmail = async (email, password, name, username, gender) => {
   try {
-    // Validate Gmail only
     if (!email.toLowerCase().endsWith('@gmail.com')) {
       return {
         success: false,
@@ -33,17 +33,30 @@ export const registerWithEmail = async (email, password, name, username, gender)
       };
     }
 
-    // Create Firebase Auth user
+    console.log('📝 Starting registration...');
+    console.log('Username:', username);
+
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Update display name
+    console.log('✅ Auth user created:', user.uid);
+
     await updateProfile(user, { displayName: name });
 
-    // Send email verification
     await sendEmailVerification(user);
 
-    // Create Firestore profile with username
+    console.log('📝 Creating username document...');
+    const usernameResult = await createUsernameDocument(username.toLowerCase(), user.uid);
+    
+    if (!usernameResult.success) {
+      console.error('❌ Username document creation failed');
+      await user.delete();
+      return {
+        success: false,
+        error: 'Username already taken or error creating profile'
+      };
+    }
+
     const userData = {
       userId: user.uid,
       username: username.toLowerCase(),
@@ -60,14 +73,14 @@ export const registerWithEmail = async (email, password, name, username, gender)
       isOnline: true,
       blockedUsers: [],
       registeredAt: new Date().toISOString(),
-      accountCreatedAt: Date.now() // For sorting
+      accountCreatedAt: Date.now()
     };
 
-    // Save to Firestore
+    console.log('📝 Creating user profile...');
     const result = await createUserProfile(user.uid, userData);
 
     if (!result.success) {
-      // Rollback: Delete auth user if Firestore fails
+      console.error('❌ User profile creation failed');
       await user.delete();
       return {
         success: false,
@@ -75,23 +88,25 @@ export const registerWithEmail = async (email, password, name, username, gender)
       };
     }
 
+    console.log('✅ Registration complete!');
+
     return {
       success: true,
       userData: result.data,
-      message: '✅ Account তৈরি হয়েছে!\n\n📧 Verification email পাঠানো হয়েছে। Inbox check করুন।'
+      message: '✅ Account তৈরি হয়েছে!\n\n📧 Verification email পাঠানো হয়েছে।'
     };
 
   } catch (error) {
-    console.error('Register error:', error);
+    console.error('❌ Register error:', error);
 
     let errorMessage = 'Registration failed। আবার try করুন।';
 
     if (error.code === 'auth/email-already-in-use') {
-      errorMessage = 'এই Gmail address দিয়ে already একটি account আছে। Login করুন।';
+      errorMessage = 'এই Gmail দিয়ে already account আছে। Login করুন।';
     } else if (error.code === 'auth/weak-password') {
       errorMessage = 'Password কমপক্ষে 6 character হতে হবে।';
     } else if (error.code === 'auth/invalid-email') {
-      errorMessage = 'Invalid Gmail address। সঠিক Gmail দিন।';
+      errorMessage = 'Invalid Gmail address।';
     }
 
     return {
@@ -102,16 +117,14 @@ export const registerWithEmail = async (email, password, name, username, gender)
 };
 
 // ============================================
-// LOGIN with Email + Sync Firestore
+// LOGIN with Email
 // ============================================
 
 export const loginWithEmail = async (email, password) => {
   try {
-    // Sign in with Firebase
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Get user profile from Firestore
     const profileResult = await getUserProfile(user.uid);
 
     if (!profileResult.success) {
@@ -122,11 +135,8 @@ export const loginWithEmail = async (email, password) => {
     }
 
     const userData = profileResult.data;
-
-    // Update online status
     await setUserOnlineStatus(user.uid, true);
 
-    // Update local cache
     await AsyncStorage.setItem('currentUser', JSON.stringify({
       ...userData,
       emailVerified: user.emailVerified
@@ -146,11 +156,11 @@ export const loginWithEmail = async (email, password) => {
     if (error.code === 'auth/user-not-found') {
       errorMessage = 'এই email দিয়ে কোনো account নেই। Register করুন।';
     } else if (error.code === 'auth/wrong-password') {
-      errorMessage = 'Password ভুল হয়েছে। আবার try করুন।';
+      errorMessage = 'Password ভুল হয়েছে।';
     } else if (error.code === 'auth/invalid-email') {
-      errorMessage = 'Invalid email address।';
+      errorMessage = 'Invalid email।';
     } else if (error.code === 'auth/too-many-requests') {
-      errorMessage = 'অনেকবার ভুল password দিয়েছেন। কিছুক্ষণ পর try করুন।';
+      errorMessage = 'অনেকবার ভুল password। কিছুক্ষণ পর try করুন।';
     } else if (error.code === 'auth/network-request-failed') {
       errorMessage = 'Network error। Internet connection check করুন।';
     }
@@ -169,54 +179,34 @@ export const loginWithEmail = async (email, password) => {
 export const subscribeToAuthChanges = (callback) => {
   return onAuthStateChanged(auth, async (user) => {
     if (user) {
-      // User signed in
       const profileResult = await getUserProfile(user.uid);
-      
       if (profileResult.success) {
         await setUserOnlineStatus(user.uid, true);
-        callback({
-          isAuthenticated: true,
-          user: profileResult.data
-        });
+        callback({ isAuthenticated: true, user: profileResult.data });
       }
     } else {
-      // User signed out
       await AsyncStorage.removeItem('currentUser');
-      callback({
-        isAuthenticated: false,
-        user: null
-      });
+      callback({ isAuthenticated: false, user: null });
     }
   });
 };
 
 // ============================================
-// SIGN OUT + Update Status
+// SIGN OUT
 // ============================================
 
 export const signOut = async () => {
   try {
     const user = auth.currentUser;
-    
     if (user) {
-      // Set offline before signing out
       await setUserOnlineStatus(user.uid, false);
     }
-
     await firebaseSignOut(auth);
     await AsyncStorage.removeItem('currentUser');
-
-    return {
-      success: true,
-      message: 'Signed out successfully'
-    };
-
+    return { success: true };
   } catch (error) {
     console.error('Sign out error:', error);
-    return {
-      success: false,
-      error: 'Sign out failed'
-    };
+    return { success: false, error: 'Sign out failed' };
   }
 };
 
@@ -227,27 +217,21 @@ export const signOut = async () => {
 export const sendPasswordReset = async (email) => {
   try {
     await sendPasswordResetEmail(auth, email);
-
     return {
       success: true,
-      message: '✅ Password reset link পাঠানো হয়েছে!\n\nEmail inbox check করুন।'
+      message: '✅ Password reset link পাঠানো হয়েছে! Email check করুন।'
     };
-
   } catch (error) {
     console.error('Password reset error:', error);
 
     let errorMessage = 'Failed to send reset email।';
-
     if (error.code === 'auth/user-not-found') {
       errorMessage = 'এই email দিয়ে কোনো account নেই।';
     } else if (error.code === 'auth/invalid-email') {
       errorMessage = 'Invalid email address।';
     }
 
-    return {
-      success: false,
-      error: errorMessage
-    };
+    return { success: false, error: errorMessage };
   }
 };
 
@@ -258,57 +242,35 @@ export const sendPasswordReset = async (email) => {
 export const resendVerificationEmail = async () => {
   try {
     const user = auth.currentUser;
-
     if (!user) {
-      return {
-        success: false,
-        error: 'No user logged in'
-      };
+      return { success: false, error: 'No user logged in' };
     }
-
     if (user.emailVerified) {
-      return {
-        success: false,
-        error: 'Email already verified!'
-      };
+      return { success: false, error: 'Email already verified!' };
     }
-
     await sendEmailVerification(user);
-
     return {
       success: true,
-      message: '✅ Verification email পাঠানো হয়েছে! Inbox check করুন।'
+      message: '✅ Verification email sent! Inbox check করুন।'
     };
-
   } catch (error) {
     console.error('Resend verification error:', error);
-    return {
-      success: false,
-      error: 'Failed to send verification email।'
-    };
+    return { success: false, error: 'Failed to send verification email' };
   }
 };
 
 export const checkEmailVerification = async () => {
   try {
     const user = auth.currentUser;
-
-    if (!user) {
-      return { verified: false };
-    }
-
-    // Reload user to get latest status
+    if (!user) return { verified: false };
+    
     await user.reload();
-
-    // Update Firestore if verified
+    
     if (user.emailVerified) {
       await updateUserProfile(user.uid, { emailVerified: true });
     }
-
-    return {
-      verified: user.emailVerified
-    };
-
+    
+    return { verified: user.emailVerified };
   } catch (error) {
     console.error('Check verification error:', error);
     return { verified: false };
@@ -322,39 +284,25 @@ export const checkEmailVerification = async () => {
 export const deleteAccount = async () => {
   try {
     const user = auth.currentUser;
-
     if (!user) {
-      return {
-        success: false,
-        error: 'No user logged in'
-      };
+      return { success: false, error: 'No user logged in' };
     }
-
-    // Delete Firebase Auth user
+    
     await user.delete();
-
-    // Clear local storage
     await AsyncStorage.clear();
-
-    return {
-      success: true,
-      message: '✅ Account permanently deleted'
-    };
-
+    
+    return { success: true, message: '✅ Account deleted' };
   } catch (error) {
     console.error('Delete account error:', error);
-
+    
     if (error.code === 'auth/requires-recent-login') {
       return {
         success: false,
-        error: 'Security purposes এর জন্য logout করে আবার login করুন, তারপর delete করুন।'
+        error: 'Logout করে আবার login করুন, তারপর delete করুন।'
       };
     }
-
-    return {
-      success: false,
-      error: 'Failed to delete account'
-    };
+    
+    return { success: false, error: 'Failed to delete account' };
   }
 };
 
