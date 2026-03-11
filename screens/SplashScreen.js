@@ -1,204 +1,82 @@
-import React, { useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Animated,
-  Dimensions
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { getUserData } from '../services/storageService';
+// screens/SplashScreen.js
+// Fixed - Checks AsyncStorage for logged in user
 
-const { width } = Dimensions.get('window');
-
-const LoadingDot = ({ delay }) => {
-  const dotAnim = useRef(new Animated.Value(0.3)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(dotAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(dotAnim, { toValue: 0.3, duration: 400, useNativeDriver: true })
-      ])
-    ).start();
-  }, []);
-
-  return <Animated.View style={[styles.dot, { opacity: dotAnim }]} />;
-};
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCurrentUser } from '../services/firebaseAuthService';
 
 const SplashScreen = ({ navigation }) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.3)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
   useEffect(() => {
-    startAnimations();
-    checkLoginStatus();
+    checkAuthStatus();
   }, []);
 
-  const startAnimations = () => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, friction: 4, tension: 40, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 800, useNativeDriver: true })
-    ]).start(() => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.1, duration: 800, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true })
-        ])
-      ).start();
-    });
-  };
-
-  const checkLoginStatus = async () => {
+  const checkAuthStatus = async () => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 2500));
-      const userData = await getUserData();
+      // Wait a bit for Firebase to initialize
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      if (userData && userData.isLoggedIn === true && userData.name) {
+      // Check if user is logged in
+      const firebaseUser = getCurrentUser();
+      const cachedUser = await AsyncStorage.getItem('currentUser');
+
+      if (firebaseUser && cachedUser) {
+        // User is logged in
+        console.log('User found, navigating to Home');
         navigation.replace('Home');
       } else {
+        // User not logged in
+        console.log('No user found, navigating to Login');
         navigation.replace('Login');
       }
     } catch (error) {
+      console.error('Auth check error:', error);
+      // On error, go to login
       navigation.replace('Login');
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.bgCircle1} />
-      <View style={styles.bgCircle2} />
-
-      <Animated.View
-        style={[
-          styles.content,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }, { translateY: slideAnim }]
-          }
-        ]}
-      >
-        <Animated.View style={[styles.logoContainer, { transform: [{ scale: pulseAnim }] }]}>
-          <Text style={styles.logo}>🚨</Text>
-        </Animated.View>
-
-        <Text style={styles.title}>Zero Trap</Text>
-        <Text style={styles.subtitle}>Emergency Help Network</Text>
-        <View style={styles.divider} />
-        <Text style={styles.tagline}>সাহায্য করুন • সাহায্য পান</Text>
-      </Animated.View>
-
-      <Animated.View style={[styles.bottomSection, { opacity: fadeAnim }]}>
-        <View style={styles.loadingDots}>
-          <LoadingDot delay={0} />
-          <LoadingDot delay={200} />
-          <LoadingDot delay={400} />
-        </View>
-        <Text style={styles.footer}>Made with ❤️ for Bangladesh</Text>
-        <Text style={styles.version}>Version 1.0.0</Text>
-      </Animated.View>
-    </SafeAreaView>
+    <View style={styles.container}>
+      <Text style={styles.logo}>🚨</Text>
+      <Text style={styles.appName}>Zero Trap</Text>
+      <Text style={styles.tagline}>Emergency Help Network</Text>
+      
+      <ActivityIndicator 
+        size="large" 
+        color="#FF3B30" 
+        style={styles.loader}
+      />
+      
+      <Text style={styles.loadingText}>Loading...</Text>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  bgCircle1: {
-    position: 'absolute',
-    width: width * 0.8,
-    height: width * 0.8,
-    borderRadius: width * 0.4,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    top: -width * 0.2,
-    right: -width * 0.2,
-  },
-  bgCircle2: {
-    position: 'absolute',
-    width: width * 0.6,
-    height: width * 0.6,
-    borderRadius: width * 0.3,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    bottom: -width * 0.1,
-    left: -width * 0.1,
-  },
-  content: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-  },
-  logoContainer: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 25,
-    borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.4)',
-  },
-  logo: {
-    fontSize: 70,
-  },
-  title: {
-    fontSize: 48,
+  logo: { fontSize: 100, marginBottom: 20 },
+  appName: {
+    fontSize: 36,
     fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 8,
-    letterSpacing: 2,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.85)',
-    marginBottom: 20,
-    letterSpacing: 1,
-  },
-  divider: {
-    width: 60,
-    height: 3,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-    borderRadius: 2,
-    marginBottom: 20,
+    color: '#FF3B30',
+    marginBottom: 10,
   },
   tagline: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.9)',
-    fontStyle: 'italic',
-    letterSpacing: 1,
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 40,
   },
-  bottomSection: {
-    position: 'absolute',
-    bottom: 40,
-    alignItems: 'center',
-  },
-  loadingDots: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#FFFFFF',
-  },
-  footer: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: 4,
-  },
-  version: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.6)',
+  loader: { marginTop: 20 },
+  loadingText: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 15,
   },
 });
 

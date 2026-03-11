@@ -6,45 +6,64 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#FF3B30"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.zerotrap.emergency"
     },
     "android": {
       "package": "com.zerotrap.emergency",
       "versionCode": 1,
-      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FF3B30"
-      },
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyCR34xAzwjLJAmsbIbBXuC_udV2rbQwgMo"
-        }
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "CAMERA",
-        "RECORD_AUDIO",
         "READ_MEDIA_IMAGES",
-        "POST_NOTIFICATIONS"
-      ]
+        "POST_NOTIFICATIONS",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "WAKE_LOCK"
+      ],
+      "googleServicesFile": "./google-services.json",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCR34xAzwjLJAmsbIbBXuC_udV2rbQwgMo"
+        }
+      }
     },
     "plugins": [
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Zero Trap needs your location for emergency help requests.",
-          "isAndroidBackgroundLocationEnabled": true
+          "locationAlwaysAndWhenInUsePermission": "Zero Trap needs your location to provide emergency help to nearby users.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "locationWhenInUsePermission": "Zero Trap needs your location to show nearby helpers during emergencies."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#FF3B30"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Zero Trap needs access to your photos to update your profile picture.",
+          "cameraPermission": "Zero Trap needs camera access to take profile pictures."
         }
       ],
       "expo-asset"

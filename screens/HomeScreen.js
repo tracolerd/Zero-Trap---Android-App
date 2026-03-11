@@ -1,5 +1,5 @@
 // screens/HomeScreen.js
-// Updated Home Screen with All Users Feature
+// FINAL - Developer Info in Quick Links + Google Maps API configured
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -16,15 +16,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCurrentUser, signOut } from '../services/firebaseAuthService';
 import { getUserProfile, setUserOnlineStatus } from '../services/firestoreService';
-import { registerForPushNotifications } from '../services/notificationService';
 
 const HomeScreen = ({ navigation }) => {
   const [userData, setUserData] = useState(null);
-  const [selectedMode, setSelectedMode] = useState('internet'); // 'internet' or 'bluetooth'
+  const [selectedMode, setSelectedMode] = useState('internet');
 
   useEffect(() => {
     loadUserData();
-    setupNotifications();
     setOnlineStatus(true);
 
     return () => {
@@ -41,7 +39,6 @@ const HomeScreen = ({ navigation }) => {
         return;
       }
 
-      // Get fresh data from Firestore
       const result = await getUserProfile(user.uid);
       
       if (result.success) {
@@ -50,13 +47,6 @@ const HomeScreen = ({ navigation }) => {
       }
     } catch (error) {
       console.error('Load user data error:', error);
-    }
-  };
-
-  const setupNotifications = async () => {
-    const user = getCurrentUser();
-    if (user) {
-      await registerForPushNotifications(user.uid);
     }
   };
 
@@ -69,20 +59,16 @@ const HomeScreen = ({ navigation }) => {
 
   const handleSeekHelp = () => {
     if (selectedMode === 'internet') {
-      // Internet mode - create help request
       navigation.navigate('Map', { mode: 'seek' });
     } else {
-      // Bluetooth mode - search nearby
       navigation.navigate('BluetoothSearch', { mode: 'seek' });
     }
   };
 
   const handleProvideHelp = () => {
     if (selectedMode === 'internet') {
-      // Internet mode - search for help requests
       navigation.navigate('SearchHelp');
     } else {
-      // Bluetooth mode - broadcast availability
       navigation.navigate('BluetoothSearch', { mode: 'provide' });
     }
   };
@@ -141,7 +127,7 @@ const HomeScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Welcome Message */}
+        {/* Welcome */}
         <View style={styles.welcomeSection}>
           <Text style={styles.welcomeText}>
             স্বাগতম, {userData?.name || 'User'}!
@@ -227,9 +213,9 @@ const HomeScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Quick Links - NEW: All Users Button */}
+        {/* Quick Links - UPDATED WITH DEVELOPER INFO */}
         <View style={styles.quickLinksSection}>
-          <Text style={styles.sectionTitle}>Community</Text>
+          <Text style={styles.sectionTitle}>Community & Info</Text>
 
           <View style={styles.quickLinksGrid}>
             <TouchableOpacity
@@ -238,7 +224,6 @@ const HomeScreen = ({ navigation }) => {
             >
               <Text style={styles.quickLinkIcon}>👥</Text>
               <Text style={styles.quickLinkText}>All Users</Text>
-              <Text style={styles.quickLinkSubtext}>View community</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -247,7 +232,6 @@ const HomeScreen = ({ navigation }) => {
             >
               <Text style={styles.quickLinkIcon}>🗺️</Text>
               <Text style={styles.quickLinkText}>Live Map</Text>
-              <Text style={styles.quickLinkSubtext}>Real-time locations</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -256,7 +240,6 @@ const HomeScreen = ({ navigation }) => {
             >
               <Text style={styles.quickLinkIcon}>📊</Text>
               <Text style={styles.quickLinkText}>History</Text>
-              <Text style={styles.quickLinkSubtext}>Your activity</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -265,7 +248,14 @@ const HomeScreen = ({ navigation }) => {
             >
               <Text style={styles.quickLinkIcon}>⚙️</Text>
               <Text style={styles.quickLinkText}>Settings</Text>
-              <Text style={styles.quickLinkSubtext}>App settings</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickLinkCard}
+              onPress={() => navigation.navigate('DeveloperInfo')}
+            >
+              <Text style={styles.quickLinkIcon}>👨‍💻</Text>
+              <Text style={styles.quickLinkText}>Developer</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -283,7 +273,7 @@ const HomeScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Logout Button */}
+        {/* Logout */}
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
@@ -291,12 +281,8 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.logoutButtonText}>🚪 Logout</Text>
         </TouchableOpacity>
 
-        {/* Footer */}
+        {/* Footer - ONLY LEGAL LINKS */}
         <View style={styles.footer}>
-          <TouchableOpacity onPress={() => navigation.navigate('DeveloperInfo')}>
-            <Text style={styles.footerLink}>Developer Info</Text>
-          </TouchableOpacity>
-          <Text style={styles.footerDivider}>•</Text>
           <TouchableOpacity onPress={() => navigation.navigate('TermsConditions')}>
             <Text style={styles.footerLink}>Terms</Text>
           </TouchableOpacity>
@@ -388,10 +374,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 12,
-    shadowColor: '#FF3B30',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
     elevation: 5,
   },
   provideHelpButton: {
@@ -399,10 +381,6 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#34C759',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
     elevation: 5,
   },
   actionIcon: { fontSize: 40, marginBottom: 8 },
@@ -415,20 +393,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   quickLinkCard: {
-    width: '48%',
+    width: '31%',
     backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     elevation: 3,
   },
   quickLinkIcon: { fontSize: 32, marginBottom: 8 },
-  quickLinkText: { fontSize: 14, fontWeight: 'bold', color: '#000', marginBottom: 3 },
-  quickLinkSubtext: { fontSize: 11, color: '#666', textAlign: 'center' },
+  quickLinkText: { fontSize: 12, fontWeight: 'bold', color: '#000', textAlign: 'center' },
   statsSection: {
     flexDirection: 'row',
     paddingHorizontal: 20,
@@ -441,10 +414,6 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     elevation: 3,
   },
   statValue: { fontSize: 24, fontWeight: 'bold', color: '#FF3B30', marginBottom: 5 },

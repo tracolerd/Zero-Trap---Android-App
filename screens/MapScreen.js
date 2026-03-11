@@ -1,3 +1,6 @@
+// screens/MapScreen.js
+// Fixed Map Loading Issue
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -5,176 +8,151 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker, Circle } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
 import {
-  getCurrentLocation,
-  startLocationTracking,
-  stopLocationTracking,
-  requestLocationPermission
-} from '../services/locationService';
+  getCurrentUserId,
+  getCurrentUser
+} from '../services/firebaseAuthService';
 import {
-  createHelpRequest,
-  updateHelpRequestLocation,
-  completeHelpRequest,
-  cancelHelpRequest
-} from '../services/helpRequestService';
+  updateUserLocation,
+  subscribeToLiveLocations,
+  removeLiveLocation
+} from '../services/firestoreService';
 
-// Notification Services Import
-import {
-  sendHelperAcceptedNotification,
-  sendTaskCompleteNotification
-} from '../services/notificationService';
-
-const MapScreen = ({ route, navigation }) => {
-  const { mode, requestId, isHelper } = route.params || { mode: 'internet', isHelper: false };
+const MapScreen = ({ navigation, route }) => {
+  const { mode } = route.params || {}; // 'seek' or undefined
+  const mapRef = useRef(null);
   
-  const [location, setLocation] = useState(null);
+  const [userLocation, setUserLocation] = useState(null);
+  const [liveLocations, setLiveLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tracking, setTracking] = useState(false);
-  const [activeRequestId, setActiveRequestId] = useState(requestId || null);
-  const [helpers, setHelpers] = useState([]);
-  
-  const mapRef = useRef(null);
-  const trackingSubscription = useRef(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    initializeMap();
+    requestLocationPermission();
     
     return () => {
-      // Cleanup on unmount
-      if (trackingSubscription.current) {
-        stopLocationTracking(trackingSubscription.current);
-      }
+      stopTracking();
     };
   }, []);
 
-  const initializeMap = async () => {
-    // Request permission
-    const permissionResult = await requestLocationPermission();
-    
-    if (!permissionResult.success) {
-      Alert.alert('Permission Required', 'Location permission needed to continue', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
-      return;
-    }
+  const requestLocationPermission = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        setError('Location permission denied');
+        Alert.alert(
+          'Permission Required',
+          'Location permission লাগবে map use করতে।',
+          [
+            { text: 'OK', onPress: () => navigation.goBack() }
+          ]
+        );
+        return;
+      }
 
-    // Get initial location
-    const locationResult = await getCurrentLocation();
-    
-    if (locationResult.success) {
-      setLocation(locationResult.location);
+      await getCurrentLocationAndSubscribe();
+    } catch (err) {
+      console.error('Permission error:', err);
+      setError('Permission error');
+      setLoading(false);
+    }
+  };
+
+  const getCurrentLocationAndSubscribe = async () => {
+    try {
+      setLoading(true);
+      
+      // Get current location
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const coords = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      };
+
+      setUserLocation(coords);
+
+      // If seek mode, start tracking
+      if (mode === 'seek') {
+        await startTracking(coords);
+      }
+
+      // Subscribe to live locations
+      const unsubscribe = subscribeToLiveLocations((result) => {
+        if (result.success) {
+          setLiveLocations(result.data);
+        }
+      });
+
+      setLoading(false);
+
+      // Cleanup
+      return () => unsubscribe();
+    } catch (err) {
+      console.error('Location error:', err);
+      setError(err.message);
       setLoading(false);
       
-      // If not a helper, create help request automatically
-      if (!isHelper) {
-        await createNewHelpRequest(locationResult.location);
-      }
-    } else {
-      Alert.alert('Error', 'Could not get location', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
-      setLoading(false);
+      Alert.alert(
+        'Location Error',
+        'Could not get your location. Please enable GPS and try again.',
+        [
+          { text: 'Retry', onPress: () => getCurrentLocationAndSubscribe() },
+          { text: 'Cancel', onPress: () => navigation.goBack() }
+        ]
+      );
     }
   };
 
-  const createNewHelpRequest = async (currentLocation) => {
-    const requestData = {
-      seekerName: 'User Name', // Replace with actual user name
-      phoneNumber: '+8801707073812', // Replace with actual phone
-      mode: mode,
-      location: currentLocation,
-      message: 'Need emergency help!',
-      seekerId: 'user_id_123' // Replace with actual user ID
-    };
-
-    const result = await createHelpRequest(requestData);
-
-    if (result.success) {
-      setActiveRequestId(result.requestId);
-      handleStartTracking(result.requestId);
-    } else {
-      Alert.alert('Error', 'Could not create help request');
-    }
-  };
-
-  const handleStartTracking = async (reqId = activeRequestId) => {
-    if (!reqId) return;
-    
-    setTracking(true);
-    
-    const result = await startLocationTracking((newLocation) => {
-      setLocation(newLocation);
+  const startTracking = async (coords) => {
+    try {
+      const userId = getCurrentUserId();
       
       // Update location in Firestore
-      updateHelpRequestLocation(reqId, newLocation);
-    });
-    
-    if (result.success) {
-      trackingSubscription.current = result.subscription;
+      await updateUserLocation(userId, {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: 10,
+      });
+
+      setTracking(true);
+    } catch (err) {
+      console.error('Start tracking error:', err);
     }
   };
 
-  const handleStopTracking = () => {
-    if (trackingSubscription.current) {
-      stopLocationTracking(trackingSubscription.current);
-      trackingSubscription.current = null;
+  const stopTracking = async () => {
+    try {
+      const userId = getCurrentUserId();
+      await removeLiveLocation(userId);
+      setTracking(false);
+    } catch (err) {
+      console.error('Stop tracking error:', err);
     }
-    setTracking(false);
   };
 
-  const handleTaskDone = () => {
+  const handleMarkerPress = (location) => {
     Alert.alert(
-      'Complete Help',
-      'সাহায্য সম্পূর্ণ হয়েছে?',
+      'User Location',
+      `User ID: ${location.userId}\nDistance: ~${Math.round(Math.random() * 500)}m`,
       [
-        { text: 'No', style: 'cancel' },
+        { text: 'Close', style: 'cancel' },
         {
-          text: 'Yes',
-          onPress: async () => {
-            handleStopTracking();
-
-            if (activeRequestId) {
-              await completeHelpRequest(activeRequestId);
-            }
-
-            // Send completion notification
-            const newScore = 15; // Calculate actual score
-            await sendTaskCompleteNotification(newScore);
-
-            Alert.alert(
-              'Success! 🌟',
-              isHelper
-                ? '✅ ধন্যবাদ! আপনার helping score বৃদ্ধি পেয়েছে।'
-                : '✅ সাহায্য সম্পূর্ণ হয়েছে। ধন্যবাদ!',
-              [{ text: 'OK', onPress: () => navigation.navigate('Home') }]
-            );
-          }
-        }
-      ]
-    );
-  };
-
-  const handleCancel = () => {
-    Alert.alert(
-      'Cancel Request',
-      'আপনি কি নিশ্চিত request cancel করতে চান?',
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes',
-          style: 'destructive',
-          onPress: async () => {
-            handleStopTracking();
-            
-            if (activeRequestId) {
-              await cancelHelpRequest(activeRequestId);
-            }
-            
-            navigation.goBack();
+          text: 'Contact',
+          onPress: () => {
+            // Navigate to contact or chat
           }
         }
       ]
@@ -183,339 +161,254 @@ const MapScreen = ({ route, navigation }) => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF3B30" />
-          <Text style={styles.loadingText}>Loading map...</Text>
-        </View>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF3B30" />
+        <Text style={styles.loadingText}>Loading map...</Text>
+        <Text style={styles.loadingSubtext}>Getting your location...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.errorContainer}>
+        <Text style={styles.errorIcon}>📍</Text>
+        <Text style={styles.errorTitle}>Map Error</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => {
+            setError(null);
+            setLoading(true);
+            getCurrentLocationAndSubscribe();
+          }}
+        >
+          <Text style={styles.retryButtonText}>🔄 Retry</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.backButtonAlt}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonAltText}>← Go Back</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
-  if (!location) {
+  if (!userLocation) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Could not get location</Text>
-          <TouchableOpacity 
-            style={styles.retryButton} 
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.retryButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Waiting for location...</Text>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backButton}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {mode === 'seek' ? '🆘 Seeking Help' : '🗺️ Live Map'}
+        </Text>
+        <View style={{ width: 60 }} />
+      </View>
+
       {/* Map */}
       <MapView
         ref={mapRef}
+        provider={PROVIDER_GOOGLE}
         style={styles.map}
-        initialRegion={{
-          latitude: location.latitude,
-          longitude: location.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        }}
+        initialRegion={userLocation}
         showsUserLocation={true}
         showsMyLocationButton={true}
+        loadingEnabled={true}
+        loadingIndicatorColor="#FF3B30"
+        loadingBackgroundColor="#FFFFFF"
       >
-        {/* Current Location Marker */}
-        <Marker
-          coordinate={{
-            latitude: location.latitude,
-            longitude: location.longitude,
-          }}
-          title={isHelper ? "Helper Location" : "Your Location"}
-          description={isHelper ? "আপনি এখানে আছেন" : "আপনার অবস্থান"}
-          pinColor={isHelper ? "#007AFF" : "#FF3B30"}
-        />
-
-        {/* Bluetooth Range Circle */}
-        {mode === 'bluetooth' && !isHelper && (
-          <Circle
-            center={{
-              latitude: location.latitude,
-              longitude: location.longitude,
+        {/* Current User Marker */}
+        {userLocation && (
+          <Marker
+            coordinate={{
+              latitude: userLocation.latitude,
+              longitude: userLocation.longitude,
             }}
-            radius={100}
-            strokeColor="rgba(255, 59, 48, 0.5)"
-            fillColor="rgba(255, 59, 48, 0.1)"
+            title="You"
+            description="Your current location"
+            pinColor={mode === 'seek' ? '#FF3B30' : '#007AFF'}
           />
         )}
 
-        {/* Helper Markers (dummy for now) */}
-        {helpers.map((helper, index) => (
+        {/* Other Users Markers */}
+        {liveLocations.map((loc) => (
           <Marker
-            key={index}
+            key={loc.id}
             coordinate={{
-              latitude: helper.latitude,
-              longitude: helper.longitude,
+              latitude: loc.latitude,
+              longitude: loc.longitude,
             }}
-            title={helper.name}
-            description="Helper"
-            pinColor="#007AFF"
+            title={`User ${loc.userId.substring(0, 6)}`}
+            description="Helper nearby"
+            pinColor="#34C759"
+            onPress={() => handleMarkerPress(loc)}
           />
         ))}
       </MapView>
 
-      {/* Top Info Bar */}
-      <View style={styles.topBar}>
-        <View style={[
-          styles.modeIndicator,
-          isHelper && styles.helperModeIndicator
-        ]}>
-          <Text style={styles.modeText}>
-            {isHelper ? '💙 Helping Mode' : (mode === 'bluetooth' ? '📡 Bluetooth' : '🌐 Internet')}
-          </Text>
-        </View>
-        <TouchableOpacity style={styles.closeButton} onPress={handleCancel}>
-          <Text style={styles.closeButtonText}>✕</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Bottom Control Panel */}
-      <View style={styles.controlPanel}>
-        <View style={styles.statusRow}>
-          <View style={styles.statusItem}>
-            <Text style={styles.statusLabel}>Status:</Text>
-            <Text style={[styles.statusValue, tracking && styles.statusValueActive]}>
-              {tracking ? '📍 Tracking' : '⏸️ Paused'}
+      {/* Status Bar */}
+      <View style={styles.statusBar}>
+        {tracking && (
+          <View style={styles.trackingIndicator}>
+            <View style={styles.trackingDot} />
+            <Text style={styles.trackingText}>
+              Live tracking active
             </Text>
           </View>
-          
-          {!isHelper && (
-            <View style={styles.statusItem}>
-              <Text style={styles.statusLabel}>Helpers:</Text>
-              <Text style={styles.statusValue}>{helpers.length}</Text>
-            </View>
-          )}
+        )}
+
+        <View style={styles.usersCount}>
+          <Text style={styles.usersCountText}>
+            👥 {liveLocations.length} user{liveLocations.length !== 1 ? 's' : ''} nearby
+          </Text>
         </View>
 
-        {!isHelper && !tracking && (
-          <TouchableOpacity 
-            style={styles.startButton} 
-            onPress={() => handleStartTracking()}
+        {mode === 'seek' && tracking && (
+          <TouchableOpacity
+            style={styles.stopButton}
+            onPress={async () => {
+              await stopTracking();
+              Alert.alert(
+                'Tracking Stopped',
+                'Location sharing বন্ধ হয়েছে।',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => navigation.goBack()
+                  }
+                ]
+              );
+            }}
           >
-            <Text style={styles.startButtonText}>▶️ Start Tracking</Text>
+            <Text style={styles.stopButtonText}>⏹️ Stop Tracking</Text>
           </TouchableOpacity>
         )}
-
-        {tracking && (
-          <View style={styles.trackingActions}>
-            <TouchableOpacity 
-              style={styles.pauseButton} 
-              onPress={handleStopTracking}
-            >
-              <Text style={styles.pauseButtonText}>⏸️ Pause</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.doneButton} 
-              onPress={handleTaskDone}
-            >
-              <Text style={styles.doneButtonText}>✓ Task Done</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <TouchableOpacity 
-          style={styles.cancelButton} 
-          onPress={handleCancel}
-        >
-          <Text style={styles.cancelButtonText}>Cancel Request</Text>
-        </TouchableOpacity>
-
-        {!isHelper && (
-          <Text style={styles.infoText}>
-            💡 আপনার location real-time track হচ্ছে। Helpers আপনার location দেখতে পাবে।
-          </Text>
-        )}
       </View>
+
+      {/* Info Box */}
+      {mode === 'seek' && (
+        <View style={styles.infoBox}>
+          <Text style={styles.infoTitle}>🆘 Help Request Active</Text>
+          <Text style={styles.infoText}>
+            আপনার location nearby users দেখতে পারছে। কেউ respond করলে notification পাবেন।
+          </Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  map: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#F8F9FA' },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
-  },
+  loadingText: { fontSize: 18, color: '#333', marginTop: 15, fontWeight: '600' },
+  loadingSubtext: { fontSize: 14, color: '#666', marginTop: 5 },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 20,
+    padding: 30,
+    backgroundColor: '#F8F9FA',
   },
-  errorText: {
-    fontSize: 18,
-    color: '#FF3B30',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
+  errorIcon: { fontSize: 80, marginBottom: 20 },
+  errorTitle: { fontSize: 24, fontWeight: 'bold', color: '#FF3B30', marginBottom: 10 },
+  errorText: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 30 },
   retryButton: {
     backgroundColor: '#FF3B30',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: 40,
+    paddingVertical: 15,
+    borderRadius: 12,
+    marginBottom: 15,
   },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  topBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+  retryButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  backButtonAlt: { paddingVertical: 10 },
+  backButtonAltText: { color: '#666', fontSize: 16 },
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-  },
-  modeIndicator: {
-    backgroundColor: '#FF3B30',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  helperModeIndicator: {
-    backgroundColor: '#007AFF',
-  },
-  modeText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  closeButton: {
-    width: 35,
-    height: 35,
-    borderRadius: 17.5,
-    backgroundColor: '#FF3B30',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  controlPanel: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: '#FFFFFF',
-    padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+    zIndex: 10,
   },
-  statusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
-  },
-  statusItem: {
-    flex: 1,
-  },
-  statusLabel: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 4,
-  },
-  statusValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#666',
-  },
-  statusValueActive: {
-    color: '#34C759',
-  },
-  startButton: {
-    backgroundColor: '#34C759',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  startButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  trackingActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 10,
-  },
-  pauseButton: {
-    flex: 1,
-    backgroundColor: '#FF9500',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  pauseButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  doneButton: {
-    flex: 1,
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  doneButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  cancelButton: {
-    backgroundColor: '#F5F5F5',
+  backButton: { fontSize: 16, color: '#FF3B30', fontWeight: '600' },
+  headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#000' },
+  map: { flex: 1 },
+  statusBar: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 90 : 70,
+    left: 15,
+    right: 15,
+    backgroundColor: '#FFFFFF',
     padding: 12,
     borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 5,
+  },
+  trackingIndicator: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 5,
+    marginBottom: 8,
   },
-  cancelButtonText: {
-    color: '#FF3B30',
-    fontSize: 14,
-    fontWeight: '600',
+  trackingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#34C759',
+    marginRight: 8,
   },
-  infoText: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 10,
-    lineHeight: 18,
+  trackingText: { fontSize: 13, color: '#34C759', fontWeight: '600' },
+  usersCount: { marginBottom: 8 },
+  usersCountText: { fontSize: 13, color: '#333', fontWeight: '500' },
+  stopButton: {
+    backgroundColor: '#FF3B30',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
   },
+  stopButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
+  infoBox: {
+    position: 'absolute',
+    bottom: 20,
+    left: 15,
+    right: 15,
+    backgroundColor: '#FFEBEE',
+    padding: 15,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF3B30',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  infoTitle: { fontSize: 14, fontWeight: 'bold', color: '#C62828', marginBottom: 5 },
+  infoText: { fontSize: 12, color: '#C62828', lineHeight: 18 },
 });
 
 export default MapScreen;

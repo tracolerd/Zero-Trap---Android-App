@@ -1,5 +1,5 @@
 // screens/EditProfileScreen.js
-// Cloud-Synced Edit Profile with Image Upload
+// Fixed Image Upload Issue
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -8,15 +8,15 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Image,
   Alert,
   ActivityIndicator,
+  ScrollView,
   Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { getCurrentUser } from '../services/firebaseAuthService';
+import { getCurrentUserId } from '../services/firebaseAuthService';
 import {
   getUserProfile,
   updateUserProfile,
@@ -30,7 +30,7 @@ const EditProfileScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [gender, setGender] = useState('');
   const [profileImage, setProfileImage] = useState('');
-  const [imageChanged, setImageChanged] = useState(false);
+  const [newImageUri, setNewImageUri] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -46,22 +46,16 @@ const EditProfileScreen = ({ navigation }) => {
       if (status !== 'granted') {
         Alert.alert(
           'Permission Required',
-          'Camera roll permission দরকার profile picture update করতে।'
+          'Gallery access permission লাগবে profile picture upload করতে।'
         );
       }
     }
   };
 
   const loadUserProfile = async () => {
-    const user = getCurrentUser();
-    
-    if (!user) {
-      navigation.replace('Login');
-      return;
-    }
+    const userId = getCurrentUserId();
+    const result = await getUserProfile(userId);
 
-    const result = await getUserProfile(user.uid);
-    
     if (result.success) {
       const data = result.data;
       setUserData(data);
@@ -70,12 +64,24 @@ const EditProfileScreen = ({ navigation }) => {
       setGender(data.gender || '');
       setProfileImage(data.profileImage || '');
     }
-    
+
     setLoading(false);
   };
 
   const pickImage = async () => {
     try {
+      // Request permission first
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Denied',
+          'Gallery access permission লাগবে।'
+        );
+        return;
+      }
+
+      // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -83,38 +89,48 @@ const EditProfileScreen = ({ navigation }) => {
         quality: 0.5,
       });
 
-      if (!result.canceled) {
-        setProfileImage(result.assets[0].uri);
-        setImageChanged(true);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setNewImageUri(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Image picker error:', error);
-      Alert.alert('Error', 'Failed to pick image');
+      console.error('Pick image error:', error);
+      Alert.alert('Error', 'Failed to pick image। আবার try করুন।');
     }
   };
 
   const removeImage = () => {
     Alert.alert(
-      'Remove Profile Picture',
-      'আপনি কি নিশ্চিত profile picture মুছতে চান?',
+      'Remove Picture',
+      'Profile picture remove করবেন?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove',
           style: 'destructive',
           onPress: () => {
+            setNewImageUri(null);
             setProfileImage('');
-            setImageChanged(true);
           }
         }
       ]
     );
   };
 
+  const validatePhone = (phone) => {
+    if (!phone) return true; // Optional field
+    const cleanPhone = phone.replace(/\D/g, '');
+    return cleanPhone.length >= 10 && cleanPhone.length <= 11;
+  };
+
   const handleSave = async () => {
     // Validation
     if (!name.trim()) {
-      Alert.alert('Error', 'নাম দিন');
+      Alert.alert('Error', 'Name দিন');
+      return;
+    }
+
+    if (phoneNumber && !validatePhone(phoneNumber)) {
+      Alert.alert('Error', 'Valid phone number দিন (10-11 digits)');
       return;
     }
 
@@ -123,45 +139,28 @@ const EditProfileScreen = ({ navigation }) => {
       return;
     }
 
-    // Validate phone number (optional but if provided, must be valid)
-    if (phoneNumber.trim()) {
-      const phoneRegex = /^[0-9]{10,11}$/;
-      const cleanPhone = phoneNumber.replace(/\D/g, '');
-      
-      if (!phoneRegex.test(cleanPhone)) {
-        Alert.alert(
-          'Invalid Phone Number',
-          'সঠিক phone number দিন (10-11 digits)'
-        );
-        return;
-      }
-    }
-
     setSaving(true);
 
-    const user = getCurrentUser();
-    
     try {
-      // Upload image if changed
+      const userId = getCurrentUserId();
       let imageUrl = profileImage;
-      
-      if (imageChanged) {
-        if (profileImage && profileImage.startsWith('file://')) {
-          // New image selected
-          setUploading(true);
-          const uploadResult = await uploadProfileImage(user.uid, profileImage);
-          setUploading(false);
-          
-          if (uploadResult.success) {
-            imageUrl = uploadResult.url;
-          } else {
-            throw new Error('Image upload failed');
-          }
-        } else if (!profileImage && userData.profileImage) {
-          // Image removed
-          await deleteProfileImage(user.uid, userData.profileImage);
-          imageUrl = '';
+
+      // Upload new image if selected
+      if (newImageUri) {
+        setUploading(true);
+        const uploadResult = await uploadProfileImage(userId, newImageUri);
+        setUploading(false);
+
+        if (uploadResult.success) {
+          imageUrl = uploadResult.url;
+        } else {
+          Alert.alert('Warning', 'Image upload failed, but profile will be updated');
         }
+      }
+
+      // Delete old image if removed
+      if (!newImageUri && !profileImage && userData.profileImage) {
+        await deleteProfileImage(userId, userData.profileImage);
       }
 
       // Update profile
@@ -172,12 +171,12 @@ const EditProfileScreen = ({ navigation }) => {
         profileImage: imageUrl
       };
 
-      const result = await updateUserProfile(user.uid, updates);
+      const result = await updateUserProfile(userId, updates);
 
       if (result.success) {
         Alert.alert(
-          '✅ সফল!',
-          'Profile update হয়েছে!',
+          'Success',
+          'Profile updated successfully!',
           [
             {
               text: 'OK',
@@ -186,12 +185,11 @@ const EditProfileScreen = ({ navigation }) => {
           ]
         );
       } else {
-        throw new Error(result.error);
+        Alert.alert('Error', 'Failed to update profile');
       }
-
     } catch (error) {
-      console.error('Save profile error:', error);
-      Alert.alert('Error', 'Profile update failed। আবার try করুন।');
+      console.error('Save error:', error);
+      Alert.alert('Error', 'Something went wrong');
     } finally {
       setSaving(false);
     }
@@ -201,156 +199,151 @@ const EditProfileScreen = ({ navigation }) => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#FF3B30" />
-        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Cancel</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Profile</Text>
-        <TouchableOpacity
-          onPress={handleSave}
-          disabled={saving || uploading}
-        >
-          <Text style={[styles.saveButton, (saving || uploading) && styles.saveButtonDisabled]}>
-            {saving || uploading ? 'Saving...' : 'Save'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Text style={styles.backButton}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Edit Profile</Text>
+          <View style={{ width: 60 }} />
+        </View>
+
         {/* Profile Picture */}
-        <View style={styles.profilePictureSection}>
-          <TouchableOpacity onPress={pickImage}>
-            {profileImage ? (
+        <View style={styles.imageSection}>
+          <View style={styles.imageContainer}>
+            {(newImageUri || profileImage) ? (
               <Image
-                source={{ uri: profileImage }}
-                style={styles.profilePicture}
+                source={{ uri: newImageUri || profileImage }}
+                style={styles.profileImage}
               />
             ) : (
-              <View style={styles.profilePicturePlaceholder}>
-                <Text style={styles.profilePicturePlaceholderText}>
-                  {name ? name[0].toUpperCase() : '+'}
+              <View style={styles.imagePlaceholder}>
+                <Text style={styles.imagePlaceholderText}>
+                  {name ? name[0].toUpperCase() : '?'}
                 </Text>
               </View>
             )}
-            <View style={styles.cameraButton}>
-              <Text style={styles.cameraIcon}>📷</Text>
-            </View>
-          </TouchableOpacity>
+          </View>
+
+          <View style={styles.imageButtons}>
+            <TouchableOpacity
+              style={styles.changeImageButton}
+              onPress={pickImage}
+              disabled={uploading}
+            >
+              <Text style={styles.changeImageButtonText}>
+                {uploading ? 'Uploading...' : '📷 Change Picture'}
+              </Text>
+            </TouchableOpacity>
+
+            {(newImageUri || profileImage) && (
+              <TouchableOpacity
+                style={styles.removeImageButton}
+                onPress={removeImage}
+                disabled={uploading}
+              >
+                <Text style={styles.removeImageButtonText}>🗑️ Remove</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {uploading && (
-            <View style={styles.uploadingOverlay}>
-              <ActivityIndicator color="#FFFFFF" size="large" />
-              <Text style={styles.uploadingText}>Uploading...</Text>
-            </View>
+            <ActivityIndicator size="small" color="#FF3B30" style={{ marginTop: 10 }} />
           )}
-
-          {profileImage && (
-            <TouchableOpacity
-              style={styles.removeImageButton}
-              onPress={removeImage}
-            >
-              <Text style={styles.removeImageText}>Remove Picture</Text>
-            </TouchableOpacity>
-          )}
-
-          <Text style={styles.imageHint}>
-            Tap to change profile picture
-          </Text>
         </View>
 
-        {/* Name */}
-        <View style={styles.inputWrapper}>
-          <Text style={styles.inputLabel}>👤 Name *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="আপনার নাম লিখুন"
-            value={name}
-            onChangeText={setName}
-          />
-        </View>
-
-        {/* Phone Number */}
-        <View style={styles.inputWrapper}>
-          <Text style={styles.inputLabel}>📱 Phone Number</Text>
-          <View style={styles.phoneInputContainer}>
-            <View style={styles.countryCode}>
-              <Text style={styles.countryCodeText}>🇧🇩 +880</Text>
+        {/* Form */}
+        <View style={styles.formSection}>
+          {/* Username (Read-only) */}
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>👤 Username (Cannot change)</Text>
+            <View style={styles.readOnlyInput}>
+              <Text style={styles.readOnlyText}>@{userData?.username}</Text>
             </View>
+          </View>
+
+          {/* Name */}
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>✏️ Name</Text>
             <TextInput
-              style={styles.phoneInput}
-              placeholder="1XXXXXXXXX"
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              keyboardType="phone-pad"
-              maxLength={11}
+              style={styles.input}
+              placeholder="Your name"
+              value={name}
+              onChangeText={setName}
             />
           </View>
-          <Text style={styles.phoneHint}>
-            ⚠️ Emergency situations এ অন্যরা আপনার number দেখতে পারবে
-          </Text>
-        </View>
 
-        {/* Gender */}
-        <View style={styles.inputWrapper}>
-          <Text style={styles.inputLabel}>⚧ Gender *</Text>
-          <View style={styles.genderContainer}>
-            {['Male', 'Female', 'Other'].map((g) => (
-              <TouchableOpacity
-                key={g}
-                style={[
-                  styles.genderButton,
-                  gender === g && styles.genderButtonActive
-                ]}
-                onPress={() => setGender(g)}
-              >
-                <Text
-                  style={[
-                    styles.genderButtonText,
-                    gender === g && styles.genderButtonTextActive
-                  ]}
-                >
-                  {g === 'Male' ? '👨 Male' : g === 'Female' ? '👩 Female' : '⚧ Other'}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Phone Number */}
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>📞 Phone Number (Optional)</Text>
+            <View style={styles.phoneInputContainer}>
+              <Text style={styles.countryCode}>+880</Text>
+              <TextInput
+                style={styles.phoneInput}
+                placeholder="1234567890"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                keyboardType="phone-pad"
+                maxLength={11}
+              />
+            </View>
+            <Text style={styles.helperText}>
+              ⚠️ Phone number সব users দেখতে পারবে (emergency contact)
+            </Text>
           </View>
+
+          {/* Gender */}
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>⚧ Gender</Text>
+            <View style={styles.genderContainer}>
+              {['Male', 'Female', 'Other'].map((g) => (
+                <TouchableOpacity
+                  key={g}
+                  style={[styles.genderButton, gender === g && styles.genderButtonActive]}
+                  onPress={() => setGender(g)}
+                >
+                  <Text style={[styles.genderButtonText, gender === g && styles.genderButtonTextActive]}>
+                    {g === 'Male' ? '👨' : g === 'Female' ? '👩' : '⚧'} {g}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Email (Read-only) */}
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>📧 Email (Cannot change)</Text>
+            <View style={styles.readOnlyInput}>
+              <Text style={styles.readOnlyText}>{userData?.email}</Text>
+            </View>
+          </View>
+
+          {/* Save Button */}
+          <TouchableOpacity
+            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+            onPress={handleSave}
+            disabled={saving || uploading}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.saveButtonText}>💾 Save Changes</Text>
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Privacy Notice */}
         <View style={styles.privacyNotice}>
-          <Text style={styles.privacyTitle}>🔒 Privacy & Safety</Text>
+          <Text style={styles.privacyTitle}>🔒 Privacy Notice</Text>
           <Text style={styles.privacyText}>
-            • আপনার profile public হবে emergency help এর জন্য{'\n'}
-            • Phone number শুধু active help requests এ দেখা যাবে{'\n'}
-            • যেকোনো অপব্যবহার report/block করতে পারবেন{'\n'}
-            • Account যেকোনো সময় delete করতে পারবেন
-          </Text>
-        </View>
-
-        {/* Save Button */}
-        <TouchableOpacity
-          style={[styles.saveButtonLarge, (saving || uploading) && styles.buttonDisabled]}
-          onPress={handleSave}
-          disabled={saving || uploading}
-        >
-          {saving || uploading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.saveButtonLargeText}>💾 Save Changes</Text>
-          )}
-        </TouchableOpacity>
-
-        {/* Cloud Sync Info */}
-        <View style={styles.cloudInfo}>
-          <Text style={styles.cloudInfoText}>
-            ☁️ সব changes cloud এ automatically save হবে
+            Name, phone number, এবং profile picture সব authenticated users দেখতে পারবে emergency help এর জন্য।
           </Text>
         </View>
       </ScrollView>
@@ -360,13 +353,8 @@ const EditProfileScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-  },
-  loadingText: { marginTop: 10, fontSize: 14, color: '#666' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { paddingBottom: 30 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -378,18 +366,16 @@ const styles = StyleSheet.create({
   },
   backButton: { fontSize: 16, color: '#FF3B30', fontWeight: '600' },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#000' },
-  saveButton: { fontSize: 16, color: '#007AFF', fontWeight: 'bold' },
-  saveButtonDisabled: { color: '#999' },
-  scrollContent: { padding: 20, paddingBottom: 40 },
-  profilePictureSection: { alignItems: 'center', marginBottom: 30 },
-  profilePicture: {
+  imageSection: { alignItems: 'center', paddingVertical: 30 },
+  imageContainer: { marginBottom: 20 },
+  profileImage: {
     width: 120,
     height: 120,
     borderRadius: 60,
     borderWidth: 4,
     borderColor: '#FF3B30',
   },
-  profilePicturePlaceholder: {
+  imagePlaceholder: {
     width: 120,
     height: 120,
     borderRadius: 60,
@@ -397,49 +383,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 4,
-    borderColor: '#FFFFFF',
+    borderColor: '#FF3B30',
   },
-  profilePicturePlaceholderText: {
-    fontSize: 48,
-    color: '#999',
-    fontWeight: 'bold',
-  },
-  cameraButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  cameraIcon: { fontSize: 20 },
-  uploadingOverlay: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  uploadingText: { color: '#FFFFFF', fontSize: 12, marginTop: 8 },
-  removeImageButton: {
-    marginTop: 10,
+  imagePlaceholderText: { fontSize: 48, color: '#999', fontWeight: 'bold' },
+  imageButtons: { flexDirection: 'row', gap: 10 },
+  changeImageButton: {
+    backgroundColor: '#FF3B30',
     paddingHorizontal: 20,
-    paddingVertical: 8,
-    backgroundColor: '#FFE5E5',
-    borderRadius: 15,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
-  removeImageText: { fontSize: 12, color: '#FF3B30', fontWeight: '600' },
-  imageHint: { fontSize: 12, color: '#999', marginTop: 8 },
+  changeImageButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  removeImageButton: {
+    backgroundColor: '#FF9500',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  removeImageButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  formSection: { paddingHorizontal: 20 },
   inputWrapper: { marginBottom: 20 },
   inputLabel: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
   input: {
@@ -451,6 +413,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     color: '#000',
   },
+  readOnlyInput: {
+    borderWidth: 2,
+    borderColor: '#E5E5EA',
+    borderRadius: 12,
+    padding: 15,
+    backgroundColor: '#F5F5F5',
+  },
+  readOnlyText: { fontSize: 16, color: '#666' },
   phoneInputContainer: {
     flexDirection: 'row',
     borderWidth: 2,
@@ -460,15 +430,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   countryCode: {
-    paddingHorizontal: 12,
-    justifyContent: 'center',
+    padding: 15,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
     backgroundColor: '#F5F5F5',
     borderRightWidth: 1,
     borderRightColor: '#E5E5EA',
   },
-  countryCodeText: { fontSize: 15, color: '#333', fontWeight: '600' },
   phoneInput: { flex: 1, padding: 15, fontSize: 16, color: '#000' },
-  phoneHint: { fontSize: 11, color: '#FF9500', marginTop: 5, fontStyle: 'italic' },
+  helperText: { fontSize: 12, color: '#FF9500', marginTop: 5, fontStyle: 'italic' },
   genderContainer: { flexDirection: 'row', gap: 10 },
   genderButton: {
     flex: 1,
@@ -485,32 +456,31 @@ const styles = StyleSheet.create({
   },
   genderButtonText: { fontSize: 14, color: '#666', fontWeight: '600' },
   genderButtonTextActive: { color: '#FFFFFF' },
-  privacyNotice: {
-    backgroundColor: '#E3F2FD',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: '#2196F3',
-  },
-  privacyTitle: { fontSize: 14, fontWeight: 'bold', color: '#1976D2', marginBottom: 8 },
-  privacyText: { fontSize: 12, color: '#666', lineHeight: 20 },
-  saveButtonLarge: {
+  saveButton: {
     backgroundColor: '#FF3B30',
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 15,
+    marginTop: 10,
     shadowColor: '#FF3B30',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
   },
-  buttonDisabled: { backgroundColor: '#FFB3AE', elevation: 0 },
-  saveButtonLargeText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
-  cloudInfo: { alignItems: 'center', paddingVertical: 10 },
-  cloudInfoText: { fontSize: 11, color: '#4CAF50', fontStyle: 'italic' },
+  saveButtonDisabled: { backgroundColor: '#FFB3AE', elevation: 0 },
+  saveButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
+  privacyNotice: {
+    backgroundColor: '#E3F2FD',
+    padding: 15,
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+  },
+  privacyTitle: { fontSize: 14, fontWeight: 'bold', color: '#1976D2', marginBottom: 5 },
+  privacyText: { fontSize: 12, color: '#666', lineHeight: 18 },
 });
 
 export default EditProfileScreen;
