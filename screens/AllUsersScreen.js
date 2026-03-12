@@ -1,5 +1,5 @@
 // screens/AllUsersScreen.js
-// View All Registered Users (Sorted by Registration Date)
+// FIXED - Filters out deleted users properly
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -8,137 +8,118 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Image,
+  TextInput,
   ActivityIndicator,
-  RefreshControl,
-  TextInput
+  Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { subscribeToAllUsers } from '../services/firestoreService';
+import { subscribeToAllUsers, getUserProfile } from '../services/firestoreService';
 import { getCurrentUserId } from '../services/firebaseAuthService';
 
 const AllUsersScreen = ({ navigation }) => {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
   const currentUserId = getCurrentUserId();
 
   useEffect(() => {
-    // Subscribe to all users (real-time)
-    const unsubscribe = subscribeToAllUsers((result) => {
+    // Subscribe to users with real-time updates
+    const unsubscribe = subscribeToAllUsers(async (result) => {
       if (result.success) {
-        setUsers(result.data);
-        setFilteredUsers(result.data);
+        // Filter out deleted users and current user
+        const validUsers = [];
+        
+        for (const user of result.data) {
+          // Skip current user
+          if (user.userId === currentUserId) continue;
+          
+          // Verify user still exists (check if profile is complete)
+          if (user.userId && user.username && user.email) {
+            // Double-check user exists in Firestore
+            const userCheck = await getUserProfile(user.userId);
+            if (userCheck.success && userCheck.data) {
+              validUsers.push(user);
+            } else {
+              console.log('⚠️ User deleted but still in cache:', user.username);
+            }
+          }
+        }
+        
+        setUsers(validUsers);
+        setFilteredUsers(validUsers);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [currentUserId]);
 
   useEffect(() => {
-    // Filter users based on search query
-    if (searchQuery.trim() === '') {
+    // Filter users based on search
+    if (!searchQuery.trim()) {
       setFilteredUsers(users);
-    } else {
-      const query = searchQuery.toLowerCase();
-      const filtered = users.filter(user => 
-        user.username.toLowerCase().includes(query) ||
-        user.name.toLowerCase().includes(query)
-      );
-      setFilteredUsers(filtered);
+      return;
     }
+
+    const query = searchQuery.toLowerCase();
+    const filtered = users.filter((user) => {
+      const name = (user.name || '').toLowerCase();
+      const username = (user.username || '').toLowerCase();
+      return name.includes(query) || username.includes(query);
+    });
+
+    setFilteredUsers(filtered);
   }, [searchQuery, users]);
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    // Real-time subscription will auto-update
-    setTimeout(() => setRefreshing(false), 1000);
-  };
-
   const handleUserPress = (user) => {
-    navigation.navigate('UserProfile', { userId: user.id });
+    navigation.navigate('UserProfile', { userId: user.userId });
   };
 
-  const renderUserItem = ({ item, index }) => {
-    const isCurrentUser = item.id === currentUserId;
-    
+  const renderUser = ({ item, index }) => {
+    const rank = index + 1;
+    const isOnline = item.isOnline || false;
+
     return (
       <TouchableOpacity
-        style={[
-          styles.userCard,
-          isCurrentUser && styles.currentUserCard
-        ]}
+        style={styles.userCard}
         onPress={() => handleUserPress(item)}
       >
-        <View style={styles.userRank}>
-          <Text style={styles.rankNumber}>#{index + 1}</Text>
-          <Text style={styles.rankLabel}>User</Text>
+        {/* Rank Badge */}
+        <View style={styles.rankBadge}>
+          <Text style={styles.rankText}>#{rank}</Text>
         </View>
 
-        <View style={styles.userImageContainer}>
+        {/* Profile Image */}
+        <View style={styles.imageContainer}>
           {item.profileImage ? (
             <Image
               source={{ uri: item.profileImage }}
-              style={styles.userImage}
+              style={styles.profileImage}
             />
           ) : (
-            <View style={styles.userImagePlaceholder}>
-              <Text style={styles.userImagePlaceholderText}>
+            <View style={styles.imagePlaceholder}>
+              <Text style={styles.imagePlaceholderText}>
                 {item.name ? item.name[0].toUpperCase() : '?'}
               </Text>
             </View>
           )}
-          
-          {item.isOnline && (
-            <View style={styles.onlineBadge} />
-          )}
+          {isOnline && <View style={styles.onlineDot} />}
         </View>
 
+        {/* User Info */}
         <View style={styles.userInfo}>
-          <View style={styles.userNameRow}>
-            <Text style={styles.userName} numberOfLines={1}>
-              {item.name}
-              {isCurrentUser && (
-                <Text style={styles.youBadge}> (You)</Text>
-              )}
+          <Text style={styles.userName}>{item.name || 'Unknown'}</Text>
+          <Text style={styles.userUsername}>@{item.username}</Text>
+          <View style={styles.statsRow}>
+            <Text style={styles.statText}>
+              🏆 {item.helpingScore || 0} • 🤝 {item.totalHelped || 0}
             </Text>
           </View>
-          
-          <Text style={styles.userUsername}>@{item.username}</Text>
-          
-          <View style={styles.userStats}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{item.helpingScore || 0}</Text>
-              <Text style={styles.statLabel}>Score</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{item.totalHelped || 0}</Text>
-              <Text style={styles.statLabel}>Helped</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>
-                {item.gender === 'Male' ? '👨' : item.gender === 'Female' ? '👩' : '⚧'}
-              </Text>
-              <Text style={styles.statLabel}>{item.gender}</Text>
-            </View>
-          </View>
-
-          <Text style={styles.joinedDate}>
-            Joined: {new Date(item.registeredAt).toLocaleDateString('en-GB')}
-          </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.viewButton}
-          onPress={() => handleUserPress(item)}
-        >
-          <Text style={styles.viewButtonText}>View →</Text>
-        </TouchableOpacity>
+        {/* Arrow */}
+        <Text style={styles.arrow}>→</Text>
       </TouchableOpacity>
     );
   };
@@ -163,20 +144,6 @@ const AllUsersScreen = ({ navigation }) => {
         <View style={{ width: 60 }} />
       </View>
 
-      {/* Stats */}
-      <View style={styles.statsBar}>
-        <View style={styles.statCard}>
-          <Text style={styles.statCardValue}>{users.length}</Text>
-          <Text style={styles.statCardLabel}>Total Users</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statCardValue}>
-            {users.filter(u => u.isOnline).length}
-          </Text>
-          <Text style={styles.statCardLabel}>Online Now</Text>
-        </View>
-      </View>
-
       {/* Search */}
       <View style={styles.searchContainer}>
         <Text style={styles.searchIcon}>🔍</Text>
@@ -187,26 +154,37 @@ const AllUsersScreen = ({ navigation }) => {
           onChangeText={setSearchQuery}
           autoCapitalize="none"
         />
-        {searchQuery.length > 0 && (
+        {searchQuery ? (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Text style={styles.clearIcon}>✕</Text>
+            <Text style={styles.clearButton}>✕</Text>
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
 
-      {/* User List */}
+      {/* Stats */}
+      <View style={styles.statsContainer}>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>{users.length}</Text>
+          <Text style={styles.statLabel}>Total Users</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>
+            {users.filter(u => u.isOnline).length}
+          </Text>
+          <Text style={styles.statLabel}>Online Now</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>{filteredUsers.length}</Text>
+          <Text style={styles.statLabel}>Search Results</Text>
+        </View>
+      </View>
+
+      {/* Users List */}
       <FlatList
         data={filteredUsers}
-        renderItem={renderUserItem}
-        keyExtractor={(item) => item.id}
+        renderItem={renderUser}
+        keyExtractor={(item) => item.userId}
         contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={['#FF3B30']}
-          />
-        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>👥</Text>
@@ -216,13 +194,6 @@ const AllUsersScreen = ({ navigation }) => {
           </View>
         }
       />
-
-      {/* Info Footer */}
-      <View style={styles.infoFooter}>
-        <Text style={styles.infoText}>
-          👆 Users sorted by registration date (oldest first)
-        </Text>
-      </View>
     </SafeAreaView>
   );
 };
@@ -235,7 +206,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
   },
-  loadingText: { marginTop: 10, fontSize: 14, color: '#666' },
+  loadingText: { marginTop: 15, fontSize: 16, color: '#666' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -246,91 +217,79 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E5EA',
   },
   backButton: { fontSize: 16, color: '#FF3B30', fontWeight: '600' },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#000' },
-  statsBar: {
-    flexDirection: 'row',
-    padding: 15,
-    gap: 10,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#FF3B30',
-    padding: 15,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  statCardValue: { fontSize: 24, fontWeight: 'bold', color: '#FFFFFF' },
-  statCardLabel: { fontSize: 12, color: '#FFFFFF', marginTop: 3 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#000' },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     margin: 15,
+    paddingHorizontal: 15,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  searchIcon: { fontSize: 20, marginRight: 10 },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#000',
+  },
+  clearButton: { fontSize: 20, color: '#999', paddingLeft: 10 },
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 15,
+    marginBottom: 10,
+    gap: 10,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
     padding: 12,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
+    alignItems: 'center',
+    elevation: 2,
   },
-  searchIcon: { fontSize: 18, marginRight: 10 },
-  searchInput: { flex: 1, fontSize: 16, color: '#000' },
-  clearIcon: { fontSize: 20, color: '#999', paddingHorizontal: 10 },
-  listContent: { paddingHorizontal: 15, paddingBottom: 20 },
+  statValue: { fontSize: 20, fontWeight: 'bold', color: '#FF3B30' },
+  statLabel: { fontSize: 11, color: '#666', marginTop: 2 },
+  listContent: { padding: 15, paddingTop: 5 },
   userCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    backgroundColor: '#FFFFFF',
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 10,
     elevation: 3,
   },
-  currentUserCard: {
-    borderWidth: 2,
-    borderColor: '#FF3B30',
-    backgroundColor: '#FFF5F5',
-  },
-  userRank: {
-    width: 50,
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  rankNumber: { fontSize: 20, fontWeight: 'bold', color: '#FF3B30' },
-  rankLabel: { fontSize: 10, color: '#999', marginTop: 2 },
-  userImageContainer: {
+  rankBadge: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
     marginRight: 12,
-    position: 'relative',
   },
-  userImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  rankText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
+  imageContainer: { position: 'relative', marginRight: 12 },
+  profileImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     borderWidth: 2,
     borderColor: '#E5E5EA',
   },
-  userImagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  imagePlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: '#E5E5EA',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  userImagePlaceholderText: {
-    fontSize: 24,
-    color: '#999',
-    fontWeight: 'bold',
-  },
-  onlineBadge: {
+  imagePlaceholderText: { fontSize: 20, fontWeight: 'bold', color: '#999' },
+  onlineDot: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
+    bottom: 0,
+    right: 0,
     width: 14,
     height: 14,
     borderRadius: 7,
@@ -339,46 +298,18 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
   },
   userInfo: { flex: 1 },
-  userNameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
-  userName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#000',
-    flex: 1,
-  },
-  youBadge: { fontSize: 12, color: '#FF3B30', fontWeight: 'normal' },
-  userUsername: { fontSize: 13, color: '#666', marginBottom: 8 },
-  userStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  statItem: { alignItems: 'center', marginRight: 8 },
-  statValue: { fontSize: 14, fontWeight: 'bold', color: '#FF3B30' },
-  statLabel: { fontSize: 10, color: '#999' },
-  statDivider: { width: 1, height: 20, backgroundColor: '#E5E5EA', marginRight: 8 },
-  joinedDate: { fontSize: 11, color: '#999', fontStyle: 'italic' },
-  viewButton: {
-    backgroundColor: '#FF3B30',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  viewButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold' },
+  userName: { fontSize: 16, fontWeight: 'bold', color: '#000', marginBottom: 2 },
+  userUsername: { fontSize: 13, color: '#666', marginBottom: 4 },
+  statsRow: { flexDirection: 'row' },
+  statText: { fontSize: 12, color: '#999' },
+  arrow: { fontSize: 20, color: '#999', marginLeft: 10 },
   emptyContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 60,
   },
   emptyIcon: { fontSize: 60, marginBottom: 15 },
   emptyText: { fontSize: 16, color: '#999' },
-  infoFooter: {
-    backgroundColor: '#E3F2FD',
-    padding: 12,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#2196F3',
-  },
-  infoText: { fontSize: 12, color: '#1976D2', fontStyle: 'italic' },
 });
 
 export default AllUsersScreen;

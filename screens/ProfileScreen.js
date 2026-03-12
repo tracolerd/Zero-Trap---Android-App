@@ -1,69 +1,145 @@
 // screens/ProfileScreen.js
-// Cloud-Synced Profile Screen with Real-time Updates
+// FIXED - Refreshes email verification status
 
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  Image,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  RefreshControl,
+  Image,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getCurrentUser } from '../services/firebaseAuthService';
-import {
-  getUserProfile,
-  subscribeToUserPresence
-} from '../services/firestoreService';
+import { sendEmailVerification } from 'firebase/auth';
+import { auth } from '../firebaseConfig';
+import { getCurrentUserId, getCurrentUser } from '../services/firebaseAuthService';
+import { getUserProfile } from '../services/firestoreService';
 
 const ProfileScreen = ({ navigation }) => {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [sendingVerification, setSendingVerification] = useState(false);
 
   useEffect(() => {
-    loadUserProfile();
-
-    // Subscribe to real-time updates
-    const user = getCurrentUser();
-    if (user) {
-      const unsubscribe = subscribeToUserPresence(user.uid, (result) => {
-        if (result.success) {
-          setUserData(prev => ({ ...prev, ...result.data }));
-        }
-      });
-
-      return () => unsubscribe();
-    }
+    loadProfile();
   }, []);
 
-  const loadUserProfile = async () => {
-    const user = getCurrentUser();
-    
-    if (!user) {
-      navigation.replace('Login');
-      return;
-    }
+  const loadProfile = async () => {
+    try {
+      const userId = getCurrentUserId();
+      const firebaseUser = getCurrentUser();
 
-    const result = await getUserProfile(user.uid);
-    
-    if (result.success) {
-      setUserData(result.data);
-    } else {
-      Alert.alert('Error', 'Failed to load profile');
+      if (!userId || !firebaseUser) {
+        navigation.replace('Login');
+        return;
+      }
+
+      // Reload user to get fresh verification status
+      await firebaseUser.reload();
+      const freshUser = auth.currentUser;
+      
+      setEmailVerified(freshUser?.emailVerified || false);
+
+      const result = await getUserProfile(userId);
+
+      if (result.success) {
+        setUserData(result.data);
+      }
+    } catch (error) {
+      console.error('Load profile error:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    
-    setLoading(false);
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadUserProfile();
-    setRefreshing(false);
+    await loadProfile();
+  };
+
+  const handleResendVerification = async () => {
+    setSendingVerification(true);
+
+    try {
+      const user = getCurrentUser();
+
+      if (!user) {
+        Alert.alert('Error', 'User not found');
+        return;
+      }
+
+      // Reload to check current status
+      await user.reload();
+      const freshUser = auth.currentUser;
+
+      if (freshUser.emailVerified) {
+        setEmailVerified(true);
+        Alert.alert('Already Verified', 'আপনার email already verified!');
+        return;
+      }
+
+      await sendEmailVerification(user);
+
+      Alert.alert(
+        'Verification Email Sent',
+        'আপনার email এ verification link পাঠানো হয়েছে। Link এ click করার পর এই page refresh করুন।'
+      );
+    } catch (error) {
+      console.error('Resend verification error:', error);
+
+      let errorMessage = 'Failed to send verification email';
+
+      if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many requests. Please wait a few minutes.';
+      }
+
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setSendingVerification(false);
+    }
+  };
+
+  const handleCheckVerification = async () => {
+    setRefreshing(true);
+
+    try {
+      const user = getCurrentUser();
+      
+      if (!user) {
+        Alert.alert('Error', 'User not found');
+        return;
+      }
+
+      // Force reload from Firebase
+      await user.reload();
+      const freshUser = auth.currentUser;
+
+      setEmailVerified(freshUser.emailVerified);
+
+      if (freshUser.emailVerified) {
+        Alert.alert(
+          '✅ Verified!',
+          'আপনার email successfully verified হয়েছে!'
+        );
+      } else {
+        Alert.alert(
+          '⚠️ Not Verified',
+          'এখনো verify হয়নি। Email check করে link এ click করুন।'
+        );
+      }
+    } catch (error) {
+      console.error('Check verification error:', error);
+      Alert.alert('Error', 'Failed to check verification status');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   if (loading) {
@@ -75,159 +151,132 @@ const ProfileScreen = ({ navigation }) => {
     );
   }
 
-  if (!userData) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>❌ Profile not found</Text>
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={loadUserProfile}
-        >
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backButton}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>My Profile</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('EditProfile')}>
+          <Text style={styles.editButton}>Edit</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-            <Text style={styles.settingsIcon}>⚙️</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Profile Picture */}
-        <View style={styles.profilePictureContainer}>
-          {userData.profileImage ? (
+        {/* Profile Image */}
+        <View style={styles.imageSection}>
+          {userData?.profileImage ? (
             <Image
               source={{ uri: userData.profileImage }}
-              style={styles.profilePicture}
+              style={styles.profileImage}
             />
           ) : (
-            <View style={styles.profilePicturePlaceholder}>
-              <Text style={styles.profilePicturePlaceholderText}>
-                {userData.name ? userData.name[0].toUpperCase() : '?'}
+            <View style={styles.imagePlaceholder}>
+              <Text style={styles.imagePlaceholderText}>
+                {userData?.name ? userData.name[0].toUpperCase() : '?'}
               </Text>
             </View>
           )}
-          
-          {/* Online Status Indicator */}
-          {userData.isOnline && (
-            <View style={styles.onlineIndicator} />
-          )}
-
-          <TouchableOpacity
-            style={styles.editProfilePicButton}
-            onPress={() => navigation.navigate('EditProfile')}
-          >
-            <Text style={styles.editIcon}>✏️</Text>
-          </TouchableOpacity>
+          {userData?.isOnline && <View style={styles.onlineDot} />}
         </View>
 
-        {/* User Info */}
-        <View style={styles.userInfoContainer}>
-          <Text style={styles.userName}>{userData.name}</Text>
-          <Text style={styles.userEmail}>{userData.email}</Text>
-          
-          {/* Email Verification Badge */}
-          {userData.emailVerified ? (
-            <View style={styles.verifiedBadge}>
-              <Text style={styles.verifiedText}>✓ Verified</Text>
+        {/* Name & Username */}
+        <Text style={styles.name}>{userData?.name || 'Unknown'}</Text>
+        <Text style={styles.username}>@{userData?.username || 'username'}</Text>
+
+        {/* Email Verification Status */}
+        {!emailVerified && (
+          <View style={styles.verificationCard}>
+            <Text style={styles.verificationTitle}>⚠️ Email Not Verified</Text>
+            <Text style={styles.verificationText}>
+              আপনার email verify করা হয়নি। Verification link email এ পাঠানো হয়েছে।
+            </Text>
+
+            <View style={styles.verificationButtons}>
+              <TouchableOpacity
+                style={styles.checkButton}
+                onPress={handleCheckVerification}
+                disabled={refreshing}
+              >
+                <Text style={styles.checkButtonText}>
+                  {refreshing ? 'Checking...' : '🔄 Check Status'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.resendButton}
+                onPress={handleResendVerification}
+                disabled={sendingVerification}
+              >
+                {sendingVerification ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.resendButtonText}>📧 Resend Email</Text>
+                )}
+              </TouchableOpacity>
             </View>
-          ) : (
-            <View style={styles.unverifiedBadge}>
-              <Text style={styles.unverifiedText}>⚠ Not Verified</Text>
-            </View>
-          )}
-        </View>
+          </View>
+        )}
+
+        {emailVerified && (
+          <View style={styles.verifiedBadge}>
+            <Text style={styles.verifiedText}>✅ Email Verified</Text>
+          </View>
+        )}
 
         {/* Stats */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{userData.helpingScore || 0}</Text>
+            <Text style={styles.statValue}>{userData?.helpingScore || 0}</Text>
             <Text style={styles.statLabel}>Helping Score</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{userData.totalHelped || 0}</Text>
+            <Text style={styles.statValue}>{userData?.totalHelped || 0}</Text>
             <Text style={styles.statLabel}>People Helped</Text>
           </View>
         </View>
 
-        {/* Contact Info */}
+        {/* Info Cards */}
         <View style={styles.infoSection}>
-          <Text style={styles.sectionTitle}>📞 Contact Information</Text>
-          
           <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Phone Number</Text>
+            <Text style={styles.infoLabel}>📧 Email</Text>
+            <Text style={styles.infoValue}>{userData?.email || 'N/A'}</Text>
+          </View>
+
+          <View style={styles.infoCard}>
+            <Text style={styles.infoLabel}>📞 Phone Number</Text>
             <Text style={styles.infoValue}>
-              {userData.phoneNumber || 'Not added yet'}
+              {userData?.phoneNumber ? `+880${userData.phoneNumber}` : 'Not provided'}
             </Text>
-            {!userData.phoneNumber && (
-              <Text style={styles.infoHint}>
-                ⚠️ Phone number জরুরি সাহায্যের জন্য গুরুত্বপূর্ণ
-              </Text>
-            )}
           </View>
 
           <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Gender</Text>
-            <Text style={styles.infoValue}>{userData.gender || 'Not set'}</Text>
+            <Text style={styles.infoLabel}>⚧ Gender</Text>
+            <Text style={styles.infoValue}>{userData?.gender || 'Not specified'}</Text>
           </View>
 
           <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Member Since</Text>
+            <Text style={styles.infoLabel}>📅 Member Since</Text>
             <Text style={styles.infoValue}>
-              {userData.registeredAt 
-                ? new Date(userData.registeredAt).toLocaleDateString('en-GB')
-                : 'N/A'
-              }
+              {userData?.registeredAt
+                ? new Date(userData.registeredAt).toLocaleDateString()
+                : 'Unknown'}
             </Text>
           </View>
         </View>
 
         {/* Privacy Notice */}
         <View style={styles.privacyNotice}>
-          <Text style={styles.privacyTitle}>🔒 Privacy Note</Text>
+          <Text style={styles.privacyTitle}>🔒 Privacy Notice</Text>
           <Text style={styles.privacyText}>
-            আপনার phone number emergency situations এ অন্য users দেখতে পারবে। 
-            যদি কেউ অপব্যবহার করে, আপনি তাকে report/block করতে পারবেন।
-          </Text>
-        </View>
-
-        {/* Action Buttons */}
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => navigation.navigate('EditProfile')}
-        >
-          <Text style={styles.editButtonText}>Edit Profile</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.helpHistoryButton}
-          onPress={() => navigation.navigate('HelpHistory')}
-        >
-          <Text style={styles.helpHistoryButtonText}>📊 Help History</Text>
-        </TouchableOpacity>
-
-        {/* Cloud Sync Status */}
-        <View style={styles.syncStatus}>
-          <Text style={styles.syncText}>
-            ☁️ Synced with Cloud
-          </Text>
-          <Text style={styles.syncSubtext}>
-            Last updated: {new Date().toLocaleTimeString()}
+            Your name, username, and phone number are public and visible to all authenticated users for emergency help coordination.
           </Text>
         </View>
       </ScrollView>
@@ -237,28 +286,13 @@ const ProfileScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
-  scrollContent: { paddingBottom: 30 },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
   },
-  loadingText: { marginTop: 10, fontSize: 14, color: '#666' },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 30,
-  },
-  errorText: { fontSize: 18, color: '#FF3B30', marginBottom: 20 },
-  retryButton: {
-    backgroundColor: '#FF3B30',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  loadingText: { marginTop: 15, fontSize: 16, color: '#666' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -270,35 +304,32 @@ const styles = StyleSheet.create({
   },
   backButton: { fontSize: 16, color: '#FF3B30', fontWeight: '600' },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#000' },
-  settingsIcon: { fontSize: 24 },
-  profilePictureContainer: {
+  editButton: { fontSize: 16, color: '#007AFF', fontWeight: '600' },
+  content: { padding: 20, paddingBottom: 40 },
+  imageSection: {
     alignItems: 'center',
-    marginTop: 30,
     marginBottom: 20,
+    position: 'relative',
   },
-  profilePicture: {
+  profileImage: {
     width: 120,
     height: 120,
     borderRadius: 60,
     borderWidth: 4,
     borderColor: '#FF3B30',
   },
-  profilePicturePlaceholder: {
+  imagePlaceholder: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#E5E5EA',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 4,
-    borderColor: '#FFFFFF',
+    borderColor: '#FF3B30',
   },
-  profilePicturePlaceholderText: {
-    fontSize: 48,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  onlineIndicator: {
+  imagePlaceholderText: { fontSize: 48, color: '#999', fontWeight: 'bold' },
+  onlineDot: {
     position: 'absolute',
     bottom: 5,
     right: '35%',
@@ -309,119 +340,132 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#FFFFFF',
   },
-  editProfilePicButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: '32%',
-    backgroundColor: '#FFFFFF',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+  name: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 5,
   },
-  editIcon: { fontSize: 18 },
-  userInfoContainer: { alignItems: 'center', marginBottom: 20 },
-  userName: { fontSize: 24, fontWeight: 'bold', color: '#000', marginBottom: 5 },
-  userEmail: { fontSize: 14, color: '#666', marginBottom: 10 },
-  verifiedBadge: {
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  verifiedText: { fontSize: 12, color: '#4CAF50', fontWeight: 'bold' },
-  unverifiedBadge: {
-    backgroundColor: '#FFF3CD',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  unverifiedText: { fontSize: 12, color: '#FFC107', fontWeight: 'bold' },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 20,
+  username: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
     marginBottom: 20,
   },
+  verificationCard: {
+    backgroundColor: '#FFF3CD',
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFC107',
+  },
+  verificationTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#856404',
+    marginBottom: 8,
+  },
+  verificationText: {
+    fontSize: 13,
+    color: '#856404',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  verificationButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  checkButton: {
+    flex: 1,
+    backgroundColor: '#007AFF',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  checkButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  resendButton: {
+    flex: 1,
+    backgroundColor: '#FF9500',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  resendButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  verifiedBadge: {
+    backgroundColor: '#E8F5E9',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  verifiedText: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    gap: 10,
+  },
   statCard: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
     padding: 20,
     borderRadius: 12,
     alignItems: 'center',
-    flex: 1,
-    marginHorizontal: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     elevation: 3,
   },
-  statValue: { fontSize: 28, fontWeight: 'bold', color: '#FF3B30', marginBottom: 5 },
-  statLabel: { fontSize: 12, color: '#666' },
-  infoSection: { paddingHorizontal: 20, marginBottom: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#000', marginBottom: 15 },
+  statValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FF3B30',
+    marginBottom: 5,
+  },
+  statLabel: { fontSize: 13, color: '#666' },
+  infoSection: { marginBottom: 20 },
   infoCard: {
     backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 12,
     marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
     elevation: 2,
   },
-  infoLabel: { fontSize: 12, color: '#999', marginBottom: 5 },
-  infoValue: { fontSize: 16, color: '#000', fontWeight: '500' },
-  infoHint: { fontSize: 11, color: '#FF9500', marginTop: 5, fontStyle: 'italic' },
+  infoLabel: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 5,
+    fontWeight: '600',
+  },
+  infoValue: { fontSize: 16, color: '#000' },
   privacyNotice: {
     backgroundColor: '#E3F2FD',
     padding: 15,
-    marginHorizontal: 20,
     borderRadius: 12,
-    marginBottom: 20,
     borderLeftWidth: 4,
     borderLeftColor: '#2196F3',
   },
-  privacyTitle: { fontSize: 14, fontWeight: 'bold', color: '#1976D2', marginBottom: 5 },
-  privacyText: { fontSize: 12, color: '#666', lineHeight: 18 },
-  editButton: {
-    backgroundColor: '#FF3B30',
-    marginHorizontal: 20,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 10,
-    shadowColor: '#FF3B30',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+  privacyTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1976D2',
+    marginBottom: 5,
   },
-  editButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
-  helpHistoryButton: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 20,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 2,
-    borderColor: '#FF3B30',
+  privacyText: {
+    fontSize: 12,
+    color: '#1976D2',
+    lineHeight: 18,
   },
-  helpHistoryButtonText: { color: '#FF3B30', fontSize: 16, fontWeight: 'bold' },
-  syncStatus: {
-    alignItems: 'center',
-    paddingVertical: 15,
-  },
-  syncText: { fontSize: 12, color: '#4CAF50', fontWeight: '600' },
-  syncSubtext: { fontSize: 10, color: '#999', marginTop: 3 },
 });
 
 export default ProfileScreen;

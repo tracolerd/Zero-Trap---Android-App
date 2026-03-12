@@ -1,112 +1,109 @@
+// screens/SettingsScreen.js
+// FIXED - Proper account deletion
+
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
-  Switch,
+  StyleSheet,
   ScrollView,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getUserData, clearUserData, updateUserData } from '../services/storageService';
-import { sendLocalNotification } from '../services/notificationService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { deleteUser } from 'firebase/auth';
+import { doc, deleteDoc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../firebaseConfig';
+import { getCurrentUserId, signOut } from '../services/firebaseAuthService';
 
 const SettingsScreen = ({ navigation }) => {
-  const [settings, setSettings] = useState({
-    notifications: true,
-    sound: true,
-    vibration: true,
-    locationAlways: false,
-    showOnMap: true,
-    autoAccept: false,
-  });
-
-  const toggleSetting = async (key) => {
-    const newValue = !settings[key];
-    setSettings(prev => ({ ...prev, [key]: newValue }));
-
-    if (key === 'notifications' && newValue) {
-      await sendLocalNotification(
-        '🔔 Notifications Enabled',
-        'Zero Trap এর notifications চালু হয়েছে!'
-      );
-    }
-  };
-
-  const handleClearData = () => {
-    Alert.alert(
-      'Clear Data',
-      'সব local data মুছে ফেলা হবে। নিশ্চিত?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: async () => {
-            await clearUserData();
-            Alert.alert('Success', 'Data cleared!', [
-              { text: 'OK', onPress: () => navigation.replace('Login') }
-            ]);
-          }
-        }
-      ]
-    );
-  };
+  const [deleting, setDeleting] = useState(false);
 
   const handleDeleteAccount = () => {
     Alert.alert(
       '⚠️ Delete Account',
-      'এই action permanent! আপনার সব data মুছে যাবে।',
+      'আপনার account permanently delete হবে। এটা undo করা যাবে না!\n\n- সব data মুছে যাবে\n- Username available হবে\n- Chat history মুছে যাবে\n\nContinue?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete Forever',
+          text: 'Delete Permanently',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Final Confirmation',
-              'সত্যিই delete করবেন? এটি undo করা যাবে না!',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Yes, Delete',
-                  style: 'destructive',
-                  onPress: async () => {
-                    await clearUserData();
-                    Alert.alert('Deleted', 'Account সফলভাবে delete হয়েছে', [
-                      { text: 'OK', onPress: () => navigation.replace('Login') }
-                    ]);
-                  }
-                }
-              ]
-            );
-          }
+          onPress: confirmDeleteAccount
         }
       ]
     );
   };
 
-  const SettingRow = ({ icon, title, subtitle, value, onToggle }) => (
-    <View style={styles.settingRow}>
-      <View style={styles.settingLeft}>
-        <Text style={styles.settingIcon}>{icon}</Text>
-        <View style={styles.settingText}>
-          <Text style={styles.settingTitle}>{title}</Text>
-          {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
-        </View>
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onToggle}
-        trackColor={{ false: '#E5E5EA', true: '#FF3B30' }}
-        thumbColor="#FFFFFF"
-      />
-    </View>
-  );
+  const confirmDeleteAccount = async () => {
+    setDeleting(true);
+
+    try {
+      const userId = getCurrentUserId();
+      const user = auth.currentUser;
+
+      if (!user || !userId) {
+        Alert.alert('Error', 'User not found');
+        setDeleting(false);
+        return;
+      }
+
+      // Get username before deleting
+      const userRef = doc(db, 'users', userId);
+      const userSnap = await getDoc(userRef);
+      const username = userSnap.exists() ? userSnap.data().username : null;
+
+      console.log('Deleting account:', userId, 'username:', username);
+
+      // 1. Delete username document
+      if (username) {
+        const usernameRef = doc(db, 'usernames', username);
+        await deleteDoc(usernameRef);
+        console.log('✅ Username document deleted');
+      }
+
+      // 2. Delete user profile
+      await deleteDoc(userRef);
+      console.log('✅ User profile deleted');
+
+      // 3. Delete from Firebase Auth
+      await deleteUser(user);
+      console.log('✅ Auth user deleted');
+
+      // 4. Clear AsyncStorage
+      await AsyncStorage.clear();
+      console.log('✅ AsyncStorage cleared');
+
+      // 5. Navigate to login
+      Alert.alert(
+        'Account Deleted',
+        'আপনার account successfully delete হয়েছে।',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.replace('Login')
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Delete account error:', error);
+      
+      let errorMessage = 'Failed to delete account';
+      
+      if (error.code === 'auth/requires-recent-login') {
+        errorMessage = 'Please logout and login again, then try deleting.';
+      }
+
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backButton}>← Back</Text>
@@ -115,250 +112,171 @@ const SettingsScreen = ({ navigation }) => {
         <View style={{ width: 60 }} />
       </View>
 
-      <ScrollView style={styles.content}>
-
-        {/* Notifications */}
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Account Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🔔 Notifications</Text>
-
-          <SettingRow
-            icon="📳"
-            title="Push Notifications"
-            subtitle="Help request alerts পাবেন"
-            value={settings.notifications}
-            onToggle={() => toggleSetting('notifications')}
-          />
-          <SettingRow
-            icon="🔊"
-            title="Sound"
-            subtitle="Notification sound"
-            value={settings.sound}
-            onToggle={() => toggleSetting('sound')}
-          />
-          <SettingRow
-            icon="📳"
-            title="Vibration"
-            subtitle="Vibrate on notification"
-            value={settings.vibration}
-            onToggle={() => toggleSetting('vibration')}
-          />
-        </View>
-
-        {/* Location */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📍 Location</Text>
-
-          <SettingRow
-            icon="🗺️"
-            title="Always Track Location"
-            subtitle="Background এ location track করবে"
-            value={settings.locationAlways}
-            onToggle={() => toggleSetting('locationAlways')}
-          />
-          <SettingRow
-            icon="👁️"
-            title="Show on Map"
-            subtitle="আপনাকে map এ দেখাবে"
-            value={settings.showOnMap}
-            onToggle={() => toggleSetting('showOnMap')}
-          />
-        </View>
-
-        {/* Help Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🤝 Help Settings</Text>
-
-          <SettingRow
-            icon="✅"
-            title="Auto Accept Help"
-            subtitle="Automatically help request accept করবে"
-            value={settings.autoAccept}
-            onToggle={() => toggleSetting('autoAccept')}
-          />
-        </View>
-
-        {/* Legal */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📄 Legal</Text>
+          <Text style={styles.sectionTitle}>Account</Text>
 
           <TouchableOpacity
-            style={styles.actionRow}
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('EditProfile')}
+          >
+            <Text style={styles.menuIcon}>✏️</Text>
+            <Text style={styles.menuText}>Edit Profile</Text>
+            <Text style={styles.menuArrow}>→</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('Profile')}
+          >
+            <Text style={styles.menuIcon}>👤</Text>
+            <Text style={styles.menuText}>View Profile</Text>
+            <Text style={styles.menuArrow}>→</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Privacy Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Privacy & Legal</Text>
+
+          <TouchableOpacity
+            style={styles.menuItem}
             onPress={() => navigation.navigate('PrivacyPolicy')}
           >
-            <Text style={styles.actionIcon}>🔒</Text>
-            <Text style={styles.actionText}>Privacy Policy</Text>
-            <Text style={styles.actionArrow}>→</Text>
+            <Text style={styles.menuIcon}>🔒</Text>
+            <Text style={styles.menuText}>Privacy Policy</Text>
+            <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.actionRow}
+            style={styles.menuItem}
             onPress={() => navigation.navigate('TermsConditions')}
           >
-            <Text style={styles.actionIcon}>📋</Text>
-            <Text style={styles.actionText}>Terms & Conditions</Text>
-            <Text style={styles.actionArrow}>→</Text>
+            <Text style={styles.menuIcon}>📄</Text>
+            <Text style={styles.menuText}>Terms & Conditions</Text>
+            <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Data & Privacy */}
+        {/* About Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🗄️ Data & Privacy</Text>
+          <Text style={styles.sectionTitle}>About</Text>
 
           <TouchableOpacity
-            style={styles.actionRow}
-            onPress={handleClearData}
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('DeveloperInfo')}
           >
-            <Text style={styles.actionIcon}>🗑️</Text>
-            <Text style={styles.actionText}>Clear Local Data</Text>
-            <Text style={styles.actionArrow}>→</Text>
+            <Text style={styles.menuIcon}>👨‍💻</Text>
+            <Text style={styles.menuText}>Developer Info</Text>
+            <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>
 
+          <View style={styles.menuItem}>
+            <Text style={styles.menuIcon}>📱</Text>
+            <Text style={styles.menuText}>Version</Text>
+            <Text style={styles.versionText}>1.0.0</Text>
+          </View>
+        </View>
+
+        {/* Danger Zone */}
+        <View style={styles.dangerSection}>
+          <Text style={styles.dangerTitle}>⚠️ Danger Zone</Text>
+
           <TouchableOpacity
-            style={[styles.actionRow, styles.deleteRow]}
+            style={[styles.deleteButton, deleting && styles.deleteButtonDisabled]}
             onPress={handleDeleteAccount}
+            disabled={deleting}
           >
-            <Text style={styles.actionIcon}>❌</Text>
-            <Text style={[styles.actionText, styles.deleteText]}>
-              Delete Account Permanently
-            </Text>
-            <Text style={styles.actionArrow}>→</Text>
+            {deleting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <Text style={styles.deleteIcon}>🗑️</Text>
+                <Text style={styles.deleteButtonText}>Delete Account</Text>
+              </>
+            )}
           </TouchableOpacity>
-        </View>
 
-        {/* App Info */}
-        <View style={styles.appInfo}>
-          <Text style={styles.appInfoText}>Zero Trap v1.0.0</Text>
-          <Text style={styles.appInfoSubtext}>Made with ❤️ for Bangladesh</Text>
+          <Text style={styles.dangerWarning}>
+            ⚠️ This action cannot be undone. All your data will be permanently deleted.
+          </Text>
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
+  container: { flex: 1, backgroundColor: '#F8F9FA' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    padding: 20,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
   },
-  backButton: {
-    fontSize: 16,
-    color: '#FF3B30',
-    fontWeight: '600',
-  },
-  headerTitle: {
-    fontSize: 18,
+  backButton: { fontSize: 16, color: '#FF3B30', fontWeight: '600' },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#000' },
+  content: { padding: 20, paddingBottom: 40 },
+  section: { marginBottom: 30 },
+  sectionTitle: {
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#666',
+    marginBottom: 10,
+    textTransform: 'uppercase',
   },
-  content: {
-    flex: 1,
-  },
-  section: {
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 15,
-    marginTop: 15,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
     elevation: 2,
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FF3B30',
-    padding: 15,
-    paddingBottom: 8,
-    backgroundColor: '#FFF5F5',
-    borderBottomWidth: 1,
-    borderBottomColor: '#FFE5E5',
+  menuIcon: { fontSize: 24, marginRight: 15 },
+  menuText: { flex: 1, fontSize: 16, color: '#000', fontWeight: '500' },
+  menuArrow: { fontSize: 18, color: '#999' },
+  versionText: { fontSize: 14, color: '#999' },
+  dangerSection: {
+    backgroundColor: '#FFEBEE',
+    padding: 20,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#FF3B30',
+    marginTop: 20,
   },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
-  },
-  settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  settingIcon: {
-    fontSize: 22,
-    marginRight: 12,
-    width: 30,
-  },
-  settingText: {
-    flex: 1,
-  },
-  settingTitle: {
-    fontSize: 15,
-    color: '#000',
-    fontWeight: '500',
-  },
-  settingSubtitle: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
-  },
-  actionIcon: {
-    fontSize: 22,
-    marginRight: 12,
-    width: 30,
-  },
-  actionText: {
-    flex: 1,
-    fontSize: 15,
-    color: '#000',
-    fontWeight: '500',
-  },
-  actionArrow: {
+  dangerTitle: {
     fontSize: 16,
-    color: '#999',
+    fontWeight: 'bold',
+    color: '#C62828',
+    marginBottom: 15,
   },
-  deleteRow: {
-    backgroundColor: '#FFF5F5',
-  },
-  deleteText: {
-    color: '#FF3B30',
-  },
-  appInfo: {
+  deleteButton: {
+    backgroundColor: '#FF3B30',
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 30,
+    justifyContent: 'center',
+    marginBottom: 12,
   },
-  appInfoText: {
-    fontSize: 13,
-    color: '#999',
-    marginBottom: 4,
+  deleteButtonDisabled: { backgroundColor: '#FFB3AE' },
+  deleteIcon: { fontSize: 20, marginRight: 10 },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
-  appInfoSubtext: {
+  dangerWarning: {
     fontSize: 12,
-    color: '#ccc',
+    color: '#C62828',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });
 
