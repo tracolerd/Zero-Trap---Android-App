@@ -1,8 +1,7 @@
 // navigation/AppNavigator.js
-// Complete Navigation with All Routes
+// FIXED - Removed NavigationContainer (only in App.js)
 
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 
 // Import all screens
@@ -19,131 +18,56 @@ import HelpChatScreen from '../screens/HelpChatScreen';
 import MapScreen from '../screens/MapScreen';
 import BluetoothSearchScreen from '../screens/BluetoothSearchScreen';
 import HelpHistoryScreen from '../screens/HelpHistoryScreen';
+import AllUsersScreen from '../screens/AllUsersScreen';
+import UserProfileScreen from '../screens/UserProfileScreen';
 import DeveloperInfoScreen from '../screens/DeveloperInfoScreen';
 import TermsConditionsScreen from '../screens/TermsConditionsScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 
-// NEW SCREENS
-import AllUsersScreen from '../screens/AllUsersScreen';
-import UserProfileScreen from '../screens/UserProfileScreen';
-
 const Stack = createStackNavigator();
 
-const AppNavigator = () => {
+const AppNavigator = ({ initialRoute = 'Splash' }) => {
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        initialRouteName="Splash"
-        screenOptions={{
-          headerShown: false,
-          cardStyle: { backgroundColor: '#FFFFFF' }
-        }}
-      >
-        {/* Authentication Flow */}
-        <Stack.Screen 
-          name="Splash" 
-          component={SplashScreen}
-        />
-        
-        <Stack.Screen 
-          name="Login" 
-          component={LoginScreen}
-        />
-        
-        <Stack.Screen 
-          name="Register" 
-          component={RegisterScreen}
-        />
-        
-        <Stack.Screen 
-          name="ForgotPassword" 
-          component={ForgotPasswordScreen}
-        />
+    <Stack.Navigator
+      initialRouteName={initialRoute}
+      screenOptions={{
+        headerShown: false,
+        gestureEnabled: true,
+        cardStyleInterpolator: ({ current: { progress } }) => ({
+          cardStyle: {
+            opacity: progress,
+          },
+        }),
+      }}
+    >
+      {/* Auth Screens */}
+      <Stack.Screen name="Splash" component={SplashScreen} />
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
 
-        {/* Main App Flow */}
-        <Stack.Screen 
-          name="Home" 
-          component={HomeScreen}
-        />
+      {/* Main Screens */}
+      <Stack.Screen name="Home" component={HomeScreen} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
 
-        {/* Profile & Settings */}
-        <Stack.Screen 
-          name="Profile" 
-          component={ProfileScreen}
-        />
-        
-        <Stack.Screen 
-          name="EditProfile" 
-          component={EditProfileScreen}
-        />
-        
-        <Stack.Screen 
-          name="Settings" 
-          component={SettingsScreen}
-        />
+      {/* Help Screens */}
+      <Stack.Screen name="SearchHelp" component={SearchHelpScreen} />
+      <Stack.Screen name="HelpChat" component={HelpChatScreen} />
+      <Stack.Screen name="Map" component={MapScreen} />
+      <Stack.Screen name="BluetoothSearch" component={BluetoothSearchScreen} />
+      <Stack.Screen name="HelpHistory" component={HelpHistoryScreen} />
 
-        {/* Help Features */}
-        <Stack.Screen 
-          name="SearchHelp" 
-          component={SearchHelpScreen}
-        />
-        
-        <Stack.Screen 
-          name="HelpChat" 
-          component={HelpChatScreen}
-        />
-        
-        <Stack.Screen 
-          name="Map" 
-          component={MapScreen}
-        />
-        
-        <Stack.Screen 
-          name="BluetoothSearch" 
-          component={BluetoothSearchScreen}
-        />
-        
-        <Stack.Screen 
-          name="HelpHistory" 
-          component={HelpHistoryScreen}
-        />
+      {/* Users Screens */}
+      <Stack.Screen name="AllUsers" component={AllUsersScreen} />
+      <Stack.Screen name="UserProfile" component={UserProfileScreen} />
 
-        {/* User Discovery - NEW */}
-        <Stack.Screen 
-          name="AllUsers" 
-          component={AllUsersScreen}
-          options={{
-            title: 'All Users',
-            headerShown: false
-          }}
-        />
-        
-        <Stack.Screen 
-          name="UserProfile" 
-          component={UserProfileScreen}
-          options={{
-            title: 'User Profile',
-            headerShown: false
-          }}
-        />
-
-        {/* Information Pages */}
-        <Stack.Screen 
-          name="DeveloperInfo" 
-          component={DeveloperInfoScreen}
-        />
-        
-        <Stack.Screen 
-          name="TermsConditions" 
-          component={TermsConditionsScreen}
-        />
-        
-        <Stack.Screen 
-          name="PrivacyPolicy" 
-          component={PrivacyPolicyScreen}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+      {/* Info Screens */}
+      <Stack.Screen name="DeveloperInfo" component={DeveloperInfoScreen} />
+      <Stack.Screen name="TermsConditions" component={TermsConditionsScreen} />
+      <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+    </Stack.Navigator>
   );
 };
 

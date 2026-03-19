@@ -1,36 +1,34 @@
 // firebaseConfig.js
-// Firebase Web SDK with Storage + Auth + Firestore
+// Complete Firebase Configuration for Zero Trap
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Your web app's Firebase configuration
+// Your Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyB2KF8TRejRghM3ZVUd8WTt39w5uXMITxc",
+  apiKey: "AIzaSyCR34xAzwjLJAmsbIbBXuC_udV2rbQwgMo",
   authDomain: "zerotrap-d81fd.firebaseapp.com",
   projectId: "zerotrap-d81fd",
   storageBucket: "zerotrap-d81fd.firebasestorage.app",
   messagingSenderId: "411206037583",
-  appId: "1:411206037583:web:43bca0fe892f7ac85dfa3a"
+  appId: "1:411206037583:android:9d03c60e6f43d08d5dfa3a"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Services
-const db = getFirestore(app);
-const auth = getAuth(app);
-const storage = getStorage(app);
-
-// Enable offline persistence
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    console.log('Persistence failed: Multiple tabs open');
-  } else if (err.code === 'unimplemented') {
-    console.log('Persistence not available');
-  }
+// Initialize Auth with AsyncStorage persistence
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
 });
 
-export { app, db, auth, storage };
+// Initialize Firestore
+const db = getFirestore(app);
+
+// Initialize Storage (for future use when upgraded to Blaze)
+const storage = getStorage(app);
+
+export { app, auth, db, storage };

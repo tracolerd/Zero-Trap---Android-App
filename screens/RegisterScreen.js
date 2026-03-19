@@ -1,146 +1,185 @@
 // screens/RegisterScreen.js
-// Registration with Unique Username
+// COMPLETE WORKING VERSION
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  ScrollView,
   Alert,
   ActivityIndicator,
-  ScrollView,
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { registerWithEmail, validateGmail } from '../services/firebaseAuthService';
+import { registerWithEmail } from '../services/firebaseAuthService';
 import { checkUsernameAvailability } from '../services/firestoreService';
 
 const RegisterScreen = ({ navigation }) => {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [name, setName] = useState('');
   const [gender, setGender] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingUsername, setCheckingUsername] = useState(false);
-  const [usernameStatus, setUsernameStatus] = useState(null); // 'available', 'taken', 'invalid'
+  const [usernameStatus, setUsernameStatus] = useState(''); // 'available', 'taken', 'invalid', ''
 
-  const getPasswordStrength = (pass) => {
-    if (pass.length < 6) return { strength: 'weak', color: '#FF3B30', text: 'দুর্বল' };
-    if (pass.length < 8) return { strength: 'medium', color: '#FF9500', text: 'মাঝারি' };
-    return { strength: 'strong', color: '#34C759', text: 'শক্তিশালী' };
-  };
-
-  const validateUsername = (text) => {
-    // Only lowercase letters, numbers, underscore, dot
-    // 3-20 characters
-    const usernameRegex = /^[a-z0-9_.]{3,20}$/;
-    return usernameRegex.test(text);
-  };
-
-  const handleUsernameChange = async (text) => {
-    const cleanText = text.toLowerCase().trim();
-    setUsername(cleanText);
-
-    if (cleanText.length < 3) {
-      setUsernameStatus(null);
+  // Debounce username check
+  useEffect(() => {
+    if (username.length < 3) {
+      setUsernameStatus('');
       return;
     }
 
-    if (!validateUsername(cleanText)) {
+    const timeoutId = setTimeout(() => {
+      checkUsername();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [username]);
+
+  const checkUsername = async () => {
+    const cleanUsername = username.toLowerCase().trim();
+
+    // Validate format
+    const usernameRegex = /^[a-z0-9_.]{3,20}$/;
+    if (!usernameRegex.test(cleanUsername)) {
       setUsernameStatus('invalid');
       return;
     }
 
-    // Check availability
     setCheckingUsername(true);
-    const isAvailable = await checkUsernameAvailability(cleanText);
-    setCheckingUsername(false);
 
-    setUsernameStatus(isAvailable ? 'available' : 'taken');
+    try {
+      const result = await checkUsernameAvailability(cleanUsername);
+
+      if (result.success) {
+        setUsernameStatus(result.available ? 'available' : 'taken');
+      } else {
+        setUsernameStatus('');
+      }
+    } catch (error) {
+      console.error('Username check error:', error);
+      setUsernameStatus('');
+    } finally {
+      setCheckingUsername(false);
+    }
   };
 
-  const handleRegister = async () => {
-    // Validation
-    if (!email.trim()) {
-      Alert.alert('Error', 'Gmail address দিন');
-      return;
+  const validateInputs = () => {
+    if (!name.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return false;
     }
 
-    if (!validateGmail(email.trim())) {
-      Alert.alert('Error', 'শুধুমাত্র Gmail address দিয়ে register করতে পারবেন (@gmail.com)');
-      return;
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter your email');
+      return false;
+    }
+
+    if (!email.toLowerCase().endsWith('@gmail.com')) {
+      Alert.alert('Error', 'Only Gmail accounts are allowed');
+      return false;
     }
 
     if (!username.trim()) {
-      Alert.alert('Error', 'Username দিন');
-      return;
-    }
-
-    if (!validateUsername(username.trim())) {
-      Alert.alert(
-        'Invalid Username',
-        'Username এ শুধু lowercase letters, numbers, underscore (_), dot (.) use করতে পারবেন। 3-20 characters।'
-      );
-      return;
+      Alert.alert('Error', 'Please enter a username');
+      return false;
     }
 
     if (usernameStatus !== 'available') {
-      Alert.alert('Error', 'Username available না। অন্য username try করুন।');
-      return;
+      Alert.alert('Error', 'Please choose a valid and available username');
+      return false;
     }
 
-    if (!password || password.length < 6) {
-      Alert.alert('Error', 'Password কমপক্ষে 6 character হতে হবে');
-      return;
+    if (!password) {
+      Alert.alert('Error', 'Please enter a password');
+      return false;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return false;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Password match করছে না');
-      return;
-    }
-
-    if (!name.trim()) {
-      Alert.alert('Error', 'আপনার নাম দিন');
-      return;
+      Alert.alert('Error', 'Passwords do not match');
+      return false;
     }
 
     if (!gender) {
-      Alert.alert('Error', 'Gender select করুন');
+      Alert.alert('Error', 'Please select your gender');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleRegister = async () => {
+    console.log('🔵 Register button pressed');
+
+    if (!validateInputs()) {
+      console.log('❌ Validation failed');
       return;
     }
 
+    console.log('✅ Validation passed');
+    console.log('Name:', name);
+    console.log('Email:', email);
+    console.log('Username:', username);
+    console.log('Gender:', gender);
+
     setLoading(true);
 
-    const result = await registerWithEmail(
-      email.trim().toLowerCase(),
-      password,
-      name.trim(),
-      username.trim().toLowerCase(),
-      gender
-    );
+    try {
+      console.log('🔄 Calling registerWithEmail...');
 
-    setLoading(false);
-
-    if (result.success) {
-      Alert.alert(
-        '🎉 সফল!',
-        result.message,
-        [
-          {
-            text: 'শুরু করি',
-            onPress: () => navigation.replace('Home')
-          }
-        ]
+      const result = await registerWithEmail(
+        email.trim(),
+        password,
+        name.trim(),
+        username.toLowerCase().trim(),
+        gender
       );
-    } else {
-      Alert.alert('Registration Error', result.error);
+
+      console.log('Registration result:', result);
+
+      setLoading(false);
+
+      if (result.success) {
+        console.log('✅ Registration successful!');
+
+        Alert.alert(
+          'Success! 🎉',
+          'Account created successfully! A verification email has been sent to your email address. Please verify your email and then login.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.replace('Login')
+            }
+          ]
+        );
+      } else {
+        console.log('❌ Registration failed:', result.error);
+
+        Alert.alert(
+          'Registration Failed',
+          result.error || 'Something went wrong. Please try again.'
+        );
+      }
+    } catch (error) {
+      console.error('❌ Registration error:', error);
+      setLoading(false);
+
+      Alert.alert(
+        'Error',
+        'An unexpected error occurred. Please try again.'
+      );
     }
   };
 
@@ -150,192 +189,159 @@ const RegisterScreen = ({ navigation }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text style={styles.backButton}>← Back</Text>
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Register</Text>
-            <View style={{ width: 60 }} />
-          </View>
-
-          <View style={styles.logoSection}>
             <Text style={styles.logo}>🚨</Text>
-            <Text style={styles.appName}>Zero Trap</Text>
-            <Text style={styles.tagline}>নতুন Account তৈরি করুন</Text>
+            <Text style={styles.title}>Create Account</Text>
+            <Text style={styles.subtitle}>Join Zero Trap Community</Text>
           </View>
 
-          <View style={styles.formSection}>
-            {/* Gmail Input */}
+          {/* Form */}
+          <View style={styles.form}>
+            {/* Name */}
             <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>📧 Gmail Address</Text>
+              <Text style={styles.label}>👤 Full Name</Text>
               <TextInput
                 style={styles.input}
-                placeholder="your@gmail.com"
+                placeholder="Enter your name"
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+                editable={!loading}
+              />
+            </View>
+
+            {/* Email */}
+            <View style={styles.inputWrapper}>
+              <Text style={styles.label}>📧 Email (Gmail only)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="yourname@gmail.com"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                autoCorrect={false}
+                editable={!loading}
               />
-              <Text style={styles.helperText}>
-                শুধুমাত্র Gmail (@gmail.com) address use করুন
-              </Text>
             </View>
 
-            {/* Username Input */}
+            {/* Username */}
             <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>👤 Username (Unique)</Text>
-              <View style={styles.usernameInputContainer}>
+              <Text style={styles.label}>✨ Username</Text>
+              <View style={styles.usernameContainer}>
                 <TextInput
-                  style={styles.input}
-                  placeholder="username (e.g., john_doe)"
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="choose_username"
                   value={username}
-                  onChangeText={handleUsernameChange}
+                  onChangeText={setUsername}
                   autoCapitalize="none"
-                  autoCorrect={false}
+                  editable={!loading}
                 />
                 {checkingUsername && (
-                  <ActivityIndicator size="small" color="#FF3B30" style={styles.usernameIndicator} />
+                  <ActivityIndicator size="small" color="#007AFF" style={styles.usernameIcon} />
+                )}
+                {!checkingUsername && usernameStatus === 'available' && (
+                  <Text style={styles.usernameIconAvailable}>✓</Text>
+                )}
+                {!checkingUsername && usernameStatus === 'taken' && (
+                  <Text style={styles.usernameIconTaken}>✗</Text>
                 )}
               </View>
               
-              {/* Username Status */}
-              {username.length >= 3 && usernameStatus === 'available' && (
-                <View style={styles.usernameStatusAvailable}>
-                  <Text style={styles.usernameStatusText}>✓ Username available!</Text>
-                </View>
+              {usernameStatus === 'available' && (
+                <Text style={styles.usernameHelp}>✓ Username available!</Text>
               )}
-              {username.length >= 3 && usernameStatus === 'taken' && (
-                <View style={styles.usernameStatusTaken}>
-                  <Text style={styles.usernameStatusText}>✗ Username already taken</Text>
-                </View>
+              {usernameStatus === 'taken' && (
+                <Text style={styles.usernameError}>✗ Username already taken</Text>
               )}
-              {username.length >= 3 && usernameStatus === 'invalid' && (
-                <View style={styles.usernameStatusInvalid}>
-                  <Text style={styles.usernameStatusText}>✗ Invalid format</Text>
-                </View>
+              {usernameStatus === 'invalid' && (
+                <Text style={styles.usernameError}>✗ Only lowercase letters, numbers, _ and .</Text>
               )}
-              
-              <Text style={styles.helperText}>
-                Lowercase letters, numbers, underscore (_), dot (.) only। 3-20 characters
-              </Text>
+              {!usernameStatus && username.length > 0 && username.length < 3 && (
+                <Text style={styles.usernameHelp}>Minimum 3 characters</Text>
+              )}
             </View>
 
-            {/* Name Input */}
+            {/* Password */}
             <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>👤 আপনার নাম</Text>
+              <Text style={styles.label}>🔒 Password</Text>
               <TextInput
                 style={styles.input}
-                placeholder="পুরো নাম লিখুন"
-                value={name}
-                onChangeText={setName}
+                placeholder="Minimum 6 characters"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                editable={!loading}
               />
             </View>
 
-            {/* Gender Selection */}
+            {/* Confirm Password */}
             <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>⚧ Gender</Text>
+              <Text style={styles.label}>🔒 Confirm Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Re-enter password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                editable={!loading}
+              />
+            </View>
+
+            {/* Gender */}
+            <View style={styles.inputWrapper}>
+              <Text style={styles.label}>⚧ Gender</Text>
               <View style={styles.genderContainer}>
                 {['Male', 'Female', 'Other'].map((g) => (
                   <TouchableOpacity
                     key={g}
-                    style={[styles.genderButton, gender === g && styles.genderButtonActive]}
-                    onPress={() => setGender(g)}
+                    style={[
+                      styles.genderButton,
+                      gender === g && styles.genderButtonActive
+                    ]}
+                    onPress={() => !loading && setGender(g)}
+                    disabled={loading}
                   >
-                    <Text style={[styles.genderButtonText, gender === g && styles.genderButtonTextActive]}>
-                      {g === 'Male' ? '👨 Male' : g === 'Female' ? '👩 Female' : '⚧ Other'}
+                    <Text
+                      style={[
+                        styles.genderButtonText,
+                        gender === g && styles.genderButtonTextActive
+                      ]}
+                    >
+                      {g === 'Male' ? '👨' : g === 'Female' ? '👩' : '⚧'} {g}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
 
-            {/* Password Input */}
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>🔒 Password</Text>
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  placeholder="Password দিন (minimum 6 characters)"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() => setShowPassword(!showPassword)}
-                >
-                  <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
-                </TouchableOpacity>
-              </View>
-              {password.length > 0 && (
-                <View style={[styles.strengthBar, { backgroundColor: getPasswordStrength(password).color }]}>
-                  <Text style={styles.strengthText}>{getPasswordStrength(password).text}</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Confirm Password Input */}
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>🔒 Confirm Password</Text>
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  placeholder="Password আবার দিন"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry={!showConfirmPassword}
-                />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                >
-                  <Text style={styles.eyeIcon}>{showConfirmPassword ? '🙈' : '👁️'}</Text>
-                </TouchableOpacity>
-              </View>
-              {confirmPassword.length > 0 && (
-                <Text style={[styles.matchText, { color: password === confirmPassword ? '#34C759' : '#FF3B30' }]}>
-                  {password === confirmPassword ? '✓ Password match হয়েছে' : '✗ Password match করছে না'}
-                </Text>
-              )}
-            </View>
-
             {/* Register Button */}
             <TouchableOpacity
-              style={[styles.registerButton, (loading || usernameStatus !== 'available') && styles.buttonDisabled]}
+              style={[styles.registerButton, loading && styles.registerButtonDisabled]}
               onPress={handleRegister}
-              disabled={loading || usernameStatus !== 'available'}
+              disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator color="#FFFFFF" />
+                  <Text style={styles.registerButtonText}>  Creating account...</Text>
+                </View>
               ) : (
-                <Text style={styles.registerButtonText}>Register করুন</Text>
+                <Text style={styles.registerButtonText}>📝 Register করুন</Text>
               )}
             </TouchableOpacity>
 
             {/* Login Link */}
-            <View style={styles.loginLinkContainer}>
-              <Text style={styles.loginLinkText}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                <Text style={styles.loginLink}>Login করুন</Text>
+            <View style={styles.loginContainer}>
+              <Text style={styles.loginText}>Already have an account? </Text>
+              <TouchableOpacity
+                onPress={() => !loading && navigation.navigate('Login')}
+                disabled={loading}
+              >
+                <Text style={styles.loginLink}>Login</Text>
               </TouchableOpacity>
             </View>
-          </View>
-
-          <View style={styles.termsContainer}>
-            <Text style={styles.termsText}>Register করে আপনি আমাদের </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('TermsConditions')}>
-              <Text style={styles.termsLink}>Terms</Text>
-            </TouchableOpacity>
-            <Text style={styles.termsText}> ও </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('PrivacyPolicy')}>
-              <Text style={styles.termsLink}>Privacy Policy</Text>
-            </TouchableOpacity>
-            <Text style={styles.termsText}> মেনে নিচ্ছেন</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -344,73 +350,49 @@ const RegisterScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  scrollContent: { flexGrow: 1, padding: 25 },
+  container: { flex: 1, backgroundColor: '#F8F9FA' },
+  scrollContent: { paddingBottom: 40 },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    paddingVertical: 40,
+    backgroundColor: '#FFFFFF',
   },
-  backButton: { fontSize: 16, color: '#FF3B30', fontWeight: '600' },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#000' },
-  logoSection: { alignItems: 'center', paddingVertical: 20 },
-  logo: { fontSize: 60, marginBottom: 10 },
-  appName: { fontSize: 28, fontWeight: 'bold', color: '#FF3B30', marginBottom: 5 },
-  tagline: { fontSize: 14, color: '#666', marginBottom: 10 },
-  formSection: { marginBottom: 20 },
-  inputWrapper: { marginBottom: 18 },
-  inputLabel: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
+  logo: { fontSize: 60, marginBottom: 15 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#000', marginBottom: 5 },
+  subtitle: { fontSize: 14, color: '#666' },
+  form: { padding: 20 },
+  inputWrapper: { marginBottom: 20 },
+  label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
   input: {
     borderWidth: 2,
     borderColor: '#E5E5EA',
     borderRadius: 12,
     padding: 15,
     fontSize: 16,
-    backgroundColor: '#F9F9F9',
+    backgroundColor: '#FFFFFF',
     color: '#000',
   },
-  usernameInputContainer: { position: 'relative' },
-  usernameIndicator: { position: 'absolute', right: 15, top: 17 },
-  usernameStatusAvailable: {
-    backgroundColor: '#E8F5E9',
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 5,
-  },
-  usernameStatusTaken: {
-    backgroundColor: '#FFEBEE',
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 5,
-  },
-  usernameStatusInvalid: {
-    backgroundColor: '#FFF3CD',
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 5,
-  },
-  usernameStatusText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
-  helperText: { fontSize: 12, color: '#999', marginTop: 5, fontStyle: 'italic' },
-  passwordContainer: {
+  usernameContainer: {
     flexDirection: 'row',
-    borderWidth: 2,
-    borderColor: '#E5E5EA',
-    borderRadius: 12,
-    backgroundColor: '#F9F9F9',
     alignItems: 'center',
   },
-  passwordInput: { flex: 1, padding: 15, fontSize: 16, color: '#000' },
-  eyeButton: { paddingHorizontal: 15 },
-  eyeIcon: { fontSize: 20 },
-  strengthBar: {
-    marginTop: 8,
-    padding: 6,
-    borderRadius: 6,
-    alignItems: 'center',
+  usernameIcon: { position: 'absolute', right: 15 },
+  usernameIconAvailable: {
+    position: 'absolute',
+    right: 15,
+    fontSize: 24,
+    color: '#34C759',
+    fontWeight: 'bold',
   },
-  strengthText: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
-  matchText: { fontSize: 12, marginTop: 5, fontWeight: '600' },
+  usernameIconTaken: {
+    position: 'absolute',
+    right: 15,
+    fontSize: 24,
+    color: '#FF3B30',
+    fontWeight: 'bold',
+  },
+  usernameHelp: { fontSize: 12, color: '#34C759', marginTop: 5 },
+  usernameError: { fontSize: 12, color: '#FF3B30', marginTop: 5 },
   genderContainer: { flexDirection: 'row', gap: 10 },
   genderButton: {
     flex: 1,
@@ -419,7 +401,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#E5E5EA',
     alignItems: 'center',
-    backgroundColor: '#F9F9F9',
+    backgroundColor: '#FFFFFF',
   },
   genderButtonActive: {
     backgroundColor: '#FF3B30',
@@ -433,26 +415,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 10,
+    shadowColor: '#FF3B30',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
     elevation: 5,
   },
-  buttonDisabled: { backgroundColor: '#FFB3AE', elevation: 0 },
+  registerButtonDisabled: { backgroundColor: '#FFB3AE', elevation: 0 },
+  loadingContainer: { flexDirection: 'row', alignItems: 'center' },
   registerButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
-  loginLinkContainer: {
+  loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
     marginTop: 20,
   },
-  loginLinkText: { fontSize: 14, color: '#666' },
-  loginLink: { fontSize: 14, color: '#FF3B30', fontWeight: 'bold' },
-  termsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    paddingVertical: 15,
-  },
-  termsText: { fontSize: 12, color: '#999' },
-  termsLink: { fontSize: 12, color: '#FF3B30', fontWeight: 'bold' },
+  loginText: { fontSize: 14, color: '#666' },
+  loginLink: { fontSize: 14, color: '#007AFF', fontWeight: '600' },
 });
 
 export default RegisterScreen;

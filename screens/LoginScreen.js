@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+// screens/LoginScreen.js
+// COMPLETE WORKING VERSION
+
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,52 +10,62 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  ScrollView,
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { loginWithEmail, checkEmailVerification } from '../services/firebaseAuthService';
+import { signInWithEmail } from '../services/firebaseAuthService';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    console.log('🔵 Login button pressed');
+
     if (!email.trim()) {
-      Alert.alert('Error', 'Gmail address দিন');
+      Alert.alert('Error', 'Please enter your email');
       return;
     }
 
-    if (!password.trim()) {
-      Alert.alert('Error', 'Password দিন');
+    if (!password) {
+      Alert.alert('Error', 'Please enter your password');
       return;
     }
 
+    console.log('Email:', email);
     setLoading(true);
 
-    const result = await loginWithEmail(email.trim().toLowerCase(), password);
+    try {
+      console.log('🔄 Calling signInWithEmail...');
 
-    setLoading(false);
+      const result = await signInWithEmail(email.trim(), password);
 
-    if (result.success) {
-      // Check email verification
-      if (!result.emailVerified) {
+      console.log('Login result:', result);
+
+      setLoading(false);
+
+      if (result.success) {
+        console.log('✅ Login successful!');
+        // Navigation will be handled by App.js auth listener
+        navigation.replace('Home');
+      } else {
+        console.log('❌ Login failed:', result.error);
+
         Alert.alert(
-          '⚠️ Email Not Verified',
-          'আপনার email verify করা নেই।\n\nEmail inbox check করে verification link এ click করুন।',
-          [
-            { text: 'OK' }
-          ]
+          'Login Failed',
+          result.error || 'Invalid email or password'
         );
-        // Still allow login, but show warning
       }
+    } catch (error) {
+      console.error('❌ Login error:', error);
+      setLoading(false);
 
-      navigation.replace('Home');
-    } else {
-      Alert.alert('Login Error', result.error);
+      Alert.alert(
+        'Error',
+        'An unexpected error occurred. Please try again.'
+      );
     }
   };
 
@@ -62,167 +75,152 @@ const LoginScreen = ({ navigation }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Logo */}
-          <View style={styles.logoSection}>
+        <View style={styles.content}>
+          {/* Header */}
+          <View style={styles.header}>
             <Text style={styles.logo}>🚨</Text>
             <Text style={styles.appName}>Zero Trap</Text>
             <Text style={styles.tagline}>Emergency Help Network</Text>
           </View>
 
-          {/* Form */}
-          <View style={styles.formSection}>
+          {/* Login Form */}
+          <View style={styles.form}>
+            <Text style={styles.title}>Welcome Back!</Text>
+            <Text style={styles.subtitle}>Login to your account</Text>
+
+            {/* Email */}
             <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>📧 Gmail Address</Text>
+              <Text style={styles.label}>📧 Email</Text>
               <TextInput
                 style={styles.input}
-                placeholder="your@gmail.com"
+                placeholder="yourname@gmail.com"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                autoCorrect={false}
+                editable={!loading}
               />
             </View>
 
+            {/* Password */}
             <View style={styles.inputWrapper}>
-              <Text style={styles.inputLabel}>🔒 Password</Text>
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  placeholder="Password দিন"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() => setShowPassword(!showPassword)}
-                >
-                  <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.label}>🔒 Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                editable={!loading}
+              />
             </View>
 
+            {/* Forgot Password */}
             <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={() => navigation.navigate('ForgotPassword')}
+              onPress={() => !loading && navigation.navigate('ForgotPassword')}
+              disabled={loading}
             >
-              <Text style={styles.forgotPasswordText}>Password ভুলে গেছেন?</Text>
+              <Text style={styles.forgotPassword}>Forgot Password?</Text>
             </TouchableOpacity>
 
+            {/* Login Button */}
             <TouchableOpacity
-              style={[styles.loginButton, loading && styles.buttonDisabled]}
+              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
               onPress={handleLogin}
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator color="#FFFFFF" />
+                  <Text style={styles.loginButtonText}>  Logging in...</Text>
+                </View>
               ) : (
-                <Text style={styles.loginButtonText}>Login</Text>
+                <Text style={styles.loginButtonText}>🔐 Login করুন</Text>
               )}
             </TouchableOpacity>
 
-            <View style={styles.dividerContainer}>
-              <View style={styles.divider} />
-              <Text style={styles.dividerText}>নতুন user?</Text>
-              <View style={styles.divider} />
+            {/* Register Link */}
+            <View style={styles.registerContainer}>
+              <Text style={styles.registerText}>Don't have an account? </Text>
+              <TouchableOpacity
+                onPress={() => !loading && navigation.navigate('Register')}
+                disabled={loading}
+              >
+                <Text style={styles.registerLink}>Register</Text>
+              </TouchableOpacity>
             </View>
-
-            <TouchableOpacity
-              style={styles.registerButton}
-              onPress={() => navigation.navigate('Register')}
-            >
-              <Text style={styles.registerButtonText}>নতুন Account তৈরি করুন</Text>
-            </TouchableOpacity>
           </View>
-
-          <View style={styles.termsContainer}>
-            <Text style={styles.termsText}>Login করে আপনি আমাদের </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('TermsConditions')}>
-              <Text style={styles.termsLink}>Terms</Text>
-            </TouchableOpacity>
-            <Text style={styles.termsText}> ও </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('PrivacyPolicy')}>
-              <Text style={styles.termsLink}>Privacy Policy</Text>
-            </TouchableOpacity>
-            <Text style={styles.termsText}> মেনে নিচ্ছেন</Text>
-          </View>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  scrollContent: { flexGrow: 1, padding: 25, justifyContent: 'center' },
-  logoSection: { alignItems: 'center', paddingVertical: 40 },
+  container: { flex: 1, backgroundColor: '#F8F9FA' },
+  content: { flex: 1, justifyContent: 'center' },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
   logo: { fontSize: 80, marginBottom: 15 },
-  appName: { fontSize: 36, fontWeight: 'bold', color: '#FF3B30', marginBottom: 8 },
-  tagline: { fontSize: 15, color: '#666' },
-  formSection: { marginBottom: 20 },
-  inputWrapper: { marginBottom: 18 },
-  inputLabel: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
+  appName: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FF3B30',
+    marginBottom: 5,
+  },
+  tagline: { fontSize: 14, color: '#666' },
+  form: { paddingHorizontal: 30 },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 5,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 30,
+  },
+  inputWrapper: { marginBottom: 20 },
+  label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
   input: {
     borderWidth: 2,
     borderColor: '#E5E5EA',
     borderRadius: 12,
-    padding: 16,
+    padding: 15,
     fontSize: 16,
-    backgroundColor: '#F9F9F9',
+    backgroundColor: '#FFFFFF',
     color: '#000',
   },
-  passwordContainer: {
-    flexDirection: 'row',
-    borderWidth: 2,
-    borderColor: '#E5E5EA',
-    borderRadius: 12,
-    backgroundColor: '#F9F9F9',
-    alignItems: 'center',
+  forgotPassword: {
+    fontSize: 14,
+    color: '#007AFF',
+    textAlign: 'right',
+    marginBottom: 20,
   },
-  passwordInput: { flex: 1, padding: 16, fontSize: 16, color: '#000' },
-  eyeButton: { paddingHorizontal: 15 },
-  eyeIcon: { fontSize: 22 },
-  forgotPassword: { alignSelf: 'flex-end', marginBottom: 20, marginTop: 5 },
-  forgotPasswordText: { fontSize: 14, color: '#FF3B30', fontWeight: '600' },
   loginButton: {
     backgroundColor: '#FF3B30',
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 20,
+    shadowColor: '#FF3B30',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
     elevation: 5,
   },
-  buttonDisabled: { backgroundColor: '#FFB3AE', elevation: 0 },
+  loginButtonDisabled: { backgroundColor: '#FFB3AE', elevation: 0 },
+  loadingContainer: { flexDirection: 'row', alignItems: 'center' },
   loginButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
-  dividerContainer: {
+  registerContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  divider: { flex: 1, height: 1, backgroundColor: '#E5E5EA' },
-  dividerText: { marginHorizontal: 15, fontSize: 14, color: '#999' },
-  registerButton: {
-    backgroundColor: '#FFFFFF',
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FF3B30',
-  },
-  registerButtonText: { color: '#FF3B30', fontSize: 16, fontWeight: 'bold' },
-  termsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'center',
-    paddingVertical: 15,
+    marginTop: 20,
   },
-  termsText: { fontSize: 12, color: '#999' },
-  termsLink: { fontSize: 12, color: '#FF3B30', fontWeight: 'bold' },
+  registerText: { fontSize: 14, color: '#666' },
+  registerLink: { fontSize: 14, color: '#007AFF', fontWeight: '600' },
 });
 
 export default LoginScreen;

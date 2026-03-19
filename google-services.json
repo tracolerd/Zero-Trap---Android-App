@@ -12,7 +12,28 @@
           "package_name": "com.zerotrap.emergency"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "411206037583-r8k0j8epj2for3ki406geib38es66gsi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zerotrap.emergency",
+            "certificate_hash": "a58841048d06249fd5e952813b952d8e85c3e9c4"
+          }
+        },
+        {
+          "client_id": "411206037583-ulst0srtshlag3hp1da0gajdmivvsnjq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zerotrap.emergency",
+            "certificate_hash": "9e00b232b0070c29f74a1b1bab34f76c3c5d6c9f"
+          }
+        },
+        {
+          "client_id": "411206037583-dgfnulikji31sieomi26pujl234amq3v.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCR34xAzwjLJAmsbIbBXuC_udV2rbQwgMo"
@@ -20,7 +41,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "411206037583-dgfnulikji31sieomi26pujl234amq3v.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

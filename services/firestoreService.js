@@ -1,5 +1,5 @@
 // services/firestoreService.js
-// Complete Firestore Service - FINAL VERSION
+// COMPLETE - All Firestore operations
 
 import {
   doc,
@@ -10,185 +10,147 @@ import {
   collection,
   query,
   where,
+  orderBy,
+  limit,
+  getDocs,
   onSnapshot,
   serverTimestamp,
-  getDocs,
-  limit,
-  orderBy,
-  addDoc
+  Timestamp
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../firebaseConfig';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ============================================
-// USERNAME MANAGEMENT
+// USERNAME OPERATIONS
 // ============================================
 
 export const checkUsernameAvailability = async (username) => {
   try {
-    if (!username || username.trim() === '') {
-      console.log('❌ Username empty');
-      return false;
-    }
-
     const cleanUsername = username.toLowerCase().trim();
     
-    console.log('🔍 Checking username:', cleanUsername);
-
-    // Check in usernames collection (public read allowed)
     const usernameRef = doc(db, 'usernames', cleanUsername);
     const usernameSnap = await getDoc(usernameRef);
-
+    
     const isAvailable = !usernameSnap.exists();
     
-    console.log(isAvailable ? '✅ Available!' : '❌ Taken!');
-
-    return isAvailable;
-
+    console.log(`Username "${cleanUsername}" available:`, isAvailable);
+    
+    return {
+      success: true,
+      available: isAvailable
+    };
   } catch (error) {
-    console.error('❌ Username check error:', error);
-    console.error('Error code:', error.code);
-    return false;
+    console.error('Check username error:', error);
+    return {
+      success: false,
+      available: false,
+      error: error.message
+    };
   }
 };
 
 export const createUsernameDocument = async (username, userId) => {
   try {
     const cleanUsername = username.toLowerCase().trim();
-    const usernameRef = doc(db, 'usernames', cleanUsername);
     
+    const usernameRef = doc(db, 'usernames', cleanUsername);
     await setDoc(usernameRef, {
       userId: userId,
       createdAt: new Date().toISOString()
     });
-
-    console.log('✅ Username document created');
+    
+    console.log('Username document created:', cleanUsername);
+    
     return { success: true };
-
   } catch (error) {
-    console.error('❌ Create username error:', error);
+    console.error('Create username document error:', error);
     return { success: false, error: error.message };
   }
 };
 
 export const searchUserByUsername = async (username) => {
   try {
+    const cleanUsername = username.toLowerCase().trim();
+    
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('username', '==', username.toLowerCase()));
+    const q = query(usersRef, where('username', '==', cleanUsername), limit(1));
     const querySnapshot = await getDocs(q);
-
+    
     if (querySnapshot.empty) {
       return { success: false, error: 'User not found' };
     }
-
-    const userDoc = querySnapshot.docs[0];
-    const userData = { id: userDoc.id, ...userDoc.data() };
-
+    
+    const userData = querySnapshot.docs[0].data();
     return { success: true, data: userData };
-
   } catch (error) {
-    console.error('Search username error:', error);
+    console.error('Search user error:', error);
     return { success: false, error: error.message };
   }
 };
 
 // ============================================
-// GET ALL USERS (Sorted by Registration Date)
-// ============================================
-
-export const getAllUsers = async () => {
-  try {
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, orderBy('accountCreatedAt', 'asc'));
-    
-    const querySnapshot = await getDocs(q);
-    const users = [];
-
-    querySnapshot.forEach((doc) => {
-      users.push({ id: doc.id, ...doc.data() });
-    });
-
-    return { success: true, data: users };
-
-  } catch (error) {
-    console.error('Get all users error:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const subscribeToAllUsers = (callback) => {
-  const usersRef = collection(db, 'users');
-  const q = query(usersRef, orderBy('accountCreatedAt', 'asc'));
-
-  return onSnapshot(q, (snapshot) => {
-    const users = [];
-    
-    snapshot.forEach((doc) => {
-      users.push({ id: doc.id, ...doc.data() });
-    });
-
-    callback({ success: true, data: users });
-  }, (error) => {
-    callback({ success: false, error: error.message });
-  });
-};
-
-// ============================================
-// USER PROFILE MANAGEMENT
+// USER PROFILE OPERATIONS
 // ============================================
 
 export const createUserProfile = async (userId, userData) => {
   try {
     const userRef = doc(db, 'users', userId);
-
+    
     const profileData = {
-      ...userData,
+      userId: userId,
+      name: userData.name || '',
+      email: userData.email || '',
+      username: userData.username ? userData.username.toLowerCase().trim() : '',
       phoneNumber: userData.phoneNumber || '',
+      gender: userData.gender || '',
       profileImage: userData.profileImage || '',
+      emailVerified: false,
+      
       helpingScore: 0,
       totalHelped: 0,
       lastHelped: null,
-      isOnline: true,
-      lastSeen: serverTimestamp(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      accountCreatedAt: Date.now()
+      
+      isOnline: false,
+      lastSeen: null,
+      blockedUsers: [],
+      
+      registeredAt: new Date().toISOString(),
+      accountCreatedAt: Date.now(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
-
+    
     await setDoc(userRef, profileData);
     
-    await AsyncStorage.setItem('currentUser', JSON.stringify(profileData));
+    console.log('User profile created:', userId);
     
     return { success: true, data: profileData };
   } catch (error) {
-    console.error('Create profile error:', error);
+    console.error('Create user profile error:', error);
     return { success: false, error: error.message };
   }
 };
 
 export const getUserProfile = async (userId) => {
   try {
+    if (!userId) {
+      return { success: false, error: 'User ID required' };
+    }
+    
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
-
+    
     if (!userSnap.exists()) {
+      console.log('User profile not found:', userId);
       return { success: false, error: 'User not found' };
     }
-
-    const userData = { id: userSnap.id, ...userSnap.data() };
     
-    await AsyncStorage.setItem(`user_${userId}`, JSON.stringify(userData));
+    const userData = userSnap.data();
+    console.log('User profile loaded:', userData.username);
     
     return { success: true, data: userData };
   } catch (error) {
-    console.error('Get profile error:', error);
-    
-    const cached = await AsyncStorage.getItem(`user_${userId}`);
-    if (cached) {
-      return { success: true, data: JSON.parse(cached), fromCache: true };
-    }
-    
+    console.error('Get user profile error:', error);
     return { success: false, error: error.message };
   }
 };
@@ -199,43 +161,115 @@ export const updateUserProfile = async (userId, updates) => {
     
     const updateData = {
       ...updates,
-      updatedAt: serverTimestamp()
+      updatedAt: new Date().toISOString()
     };
-
+    
     await updateDoc(userRef, updateData);
     
-    const current = await AsyncStorage.getItem('currentUser');
-    if (current) {
-      const userData = JSON.parse(current);
-      const updated = { ...userData, ...updates };
-      await AsyncStorage.setItem('currentUser', JSON.stringify(updated));
-    }
+    console.log('User profile updated:', userId);
     
     return { success: true };
   } catch (error) {
-    console.error('Update profile error:', error);
+    console.error('Update user profile error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const deleteUserProfile = async (userId) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await deleteDoc(userRef);
+    
+    console.log('User profile deleted:', userId);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Delete user profile error:', error);
     return { success: false, error: error.message };
   }
 };
 
 // ============================================
-// PROFILE IMAGE UPLOAD
+// ALL USERS OPERATIONS
+// ============================================
+
+export const getAllUsers = async () => {
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, orderBy('accountCreatedAt', 'asc'));
+    const querySnapshot = await getDocs(q);
+    
+    const users = [];
+    querySnapshot.forEach((doc) => {
+      users.push(doc.data());
+    });
+    
+    console.log('All users loaded:', users.length);
+    
+    return { success: true, data: users };
+  } catch (error) {
+    console.error('Get all users error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const subscribeToAllUsers = (callback) => {
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, orderBy('accountCreatedAt', 'asc'));
+    
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const users = [];
+      querySnapshot.forEach((doc) => {
+        users.push(doc.data());
+      });
+      
+      console.log('Users updated:', users.length);
+      callback({ success: true, data: users });
+    }, (error) => {
+      console.error('Subscribe to users error:', error);
+      callback({ success: false, error: error.message });
+    });
+    
+    return unsubscribe;
+  } catch (error) {
+    console.error('Subscribe to users error:', error);
+    return () => {};
+  }
+};
+
+// ============================================
+// PROFILE IMAGE OPERATIONS
 // ============================================
 
 export const uploadProfileImage = async (userId, imageUri) => {
   try {
+    console.log('Uploading image...');
+    
+    // Note: Storage requires Blaze plan
+    // For now, return placeholder
+    console.warn('Storage requires Blaze plan upgrade');
+    
+    return {
+      success: false,
+      error: 'Image upload requires Blaze plan. Please upgrade Firebase.'
+    };
+    
+    // Uncomment when upgraded to Blaze:
+    /*
     const response = await fetch(imageUri);
     const blob = await response.blob();
-
-    const imageRef = ref(storage, `profile_images/${userId}_${Date.now()}.jpg`);
-
-    await uploadBytes(imageRef, blob);
-
-    const downloadURL = await getDownloadURL(imageRef);
-
-    await updateUserProfile(userId, { profileImage: downloadURL });
-
+    
+    const filename = `profile_images/${userId}_${Date.now()}.jpg`;
+    const storageRef = ref(storage, filename);
+    
+    await uploadBytes(storageRef, blob);
+    const downloadURL = await getDownloadURL(storageRef);
+    
+    console.log('Image uploaded:', downloadURL);
+    
     return { success: true, url: downloadURL };
+    */
   } catch (error) {
     console.error('Upload image error:', error);
     return { success: false, error: error.message };
@@ -244,15 +278,17 @@ export const uploadProfileImage = async (userId, imageUri) => {
 
 export const deleteProfileImage = async (userId, imageUrl) => {
   try {
-    if (!imageUrl) return { success: true };
-
-    const imageRef = ref(storage, imageUrl);
+    console.warn('Delete image requires Blaze plan');
+    return { success: false };
     
+    // Uncomment when upgraded to Blaze:
+    /*
+    const imageRef = ref(storage, imageUrl);
     await deleteObject(imageRef);
-
-    await updateUserProfile(userId, { profileImage: '' });
-
+    
+    console.log('Image deleted');
     return { success: true };
+    */
   } catch (error) {
     console.error('Delete image error:', error);
     return { success: false, error: error.message };
@@ -260,7 +296,7 @@ export const deleteProfileImage = async (userId, imageUrl) => {
 };
 
 // ============================================
-// REAL-TIME USER PRESENCE
+// ONLINE STATUS OPERATIONS
 // ============================================
 
 export const setUserOnlineStatus = async (userId, isOnline) => {
@@ -268,10 +304,12 @@ export const setUserOnlineStatus = async (userId, isOnline) => {
     const userRef = doc(db, 'users', userId);
     
     await updateDoc(userRef, {
-      isOnline,
-      lastSeen: serverTimestamp()
+      isOnline: isOnline,
+      lastSeen: new Date().toISOString()
     });
-
+    
+    console.log('Online status updated:', isOnline);
+    
     return { success: true };
   } catch (error) {
     console.error('Set online status error:', error);
@@ -280,157 +318,110 @@ export const setUserOnlineStatus = async (userId, isOnline) => {
 };
 
 export const subscribeToUserPresence = (userId, callback) => {
-  const userRef = doc(db, 'users', userId);
-  
-  return onSnapshot(userRef, (snapshot) => {
-    if (snapshot.exists()) {
-      callback({ success: true, data: snapshot.data() });
-    }
-  }, (error) => {
-    callback({ success: false, error: error.message });
-  });
+  try {
+    const userRef = doc(db, 'users', userId);
+    
+    const unsubscribe = onSnapshot(userRef, (doc) => {
+      if (doc.exists()) {
+        const userData = doc.data();
+        callback({
+          success: true,
+          isOnline: userData.isOnline || false,
+          lastSeen: userData.lastSeen
+        });
+      }
+    }, (error) => {
+      console.error('Subscribe to presence error:', error);
+      callback({ success: false, error: error.message });
+    });
+    
+    return unsubscribe;
+  } catch (error) {
+    console.error('Subscribe to presence error:', error);
+    return () => {};
+  }
 };
 
 // ============================================
-// HELP REQUEST MANAGEMENT
+// HELP REQUEST OPERATIONS
 // ============================================
 
-export const createHelpRequest = async (requestData) => {
+export const createHelpRequest = async (userId, location, description = '') => {
   try {
-    const helpRequestsRef = collection(db, 'helpRequests');
+    const requestRef = doc(collection(db, 'helpRequests'));
     
-    const request = {
-      ...requestData,
+    const requestData = {
+      requestId: requestRef.id,
+      userId: userId,
+      location: location,
+      description: description,
       status: 'active',
       helpers: [],
-      createdAt: serverTimestamp(),
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000)
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString() // 1 hour
     };
-
-    const docRef = await addDoc(helpRequestsRef, request);
-
-    return { success: true, requestId: docRef.id, data: request };
+    
+    await setDoc(requestRef, requestData);
+    
+    console.log('Help request created:', requestRef.id);
+    
+    return { success: true, requestId: requestRef.id };
   } catch (error) {
     console.error('Create help request error:', error);
     return { success: false, error: error.message };
   }
 };
 
-export const subscribeToNearbyHelpRequests = (userLocation, radius, callback) => {
-  const helpRequestsRef = collection(db, 'helpRequests');
-  const q = query(
-    helpRequestsRef,
-    where('status', '==', 'active'),
-    orderBy('createdAt', 'desc'),
-    limit(50)
-  );
-
-  return onSnapshot(q, (snapshot) => {
-    const requests = [];
-    
-    snapshot.forEach((doc) => {
-      const data = { id: doc.id, ...doc.data() };
-      
-      if (userLocation && data.location) {
-        const distance = calculateDistance(
-          userLocation.latitude,
-          userLocation.longitude,
-          data.location.latitude,
-          data.location.longitude
-        );
-        
-        if (distance <= radius) {
-          requests.push({ ...data, distance });
-        }
-      } else {
-        requests.push(data);
-      }
-    });
-
-    callback({ success: true, data: requests });
-  }, (error) => {
-    callback({ success: false, error: error.message });
-  });
-};
-
-export const acceptHelpRequest = async (requestId, helperId, helperName) => {
+export const subscribeToNearbyHelpRequests = (userLocation, callback) => {
   try {
-    const requestRef = doc(db, 'helpRequests', requestId);
-    const requestSnap = await getDoc(requestRef);
-
-    if (!requestSnap.exists()) {
-      return { success: false, error: 'Request not found' };
-    }
-
-    const helpers = requestSnap.data().helpers || [];
+    const requestsRef = collection(db, 'helpRequests');
+    const q = query(
+      requestsRef,
+      where('status', '==', 'active'),
+      orderBy('createdAt', 'desc')
+    );
     
-    if (!helpers.find(h => h.id === helperId)) {
-      helpers.push({
-        id: helperId,
-        name: helperName,
-        acceptedAt: serverTimestamp()
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const requests = [];
+      querySnapshot.forEach((doc) => {
+        requests.push(doc.data());
       });
-
-      await updateDoc(requestRef, { helpers });
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Accept help error:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const completeHelpRequest = async (requestId, helperId) => {
-  try {
-    const requestRef = doc(db, 'helpRequests', requestId);
-    
-    await updateDoc(requestRef, {
-      status: 'completed',
-      completedAt: serverTimestamp(),
-      completedBy: helperId
-    });
-
-    const helperRef = doc(db, 'users', helperId);
-    const helperSnap = await getDoc(helperRef);
-    
-    if (helperSnap.exists()) {
-      const currentScore = helperSnap.data().helpingScore || 0;
-      const totalHelped = helperSnap.data().totalHelped || 0;
       
-      await updateDoc(helperRef, {
-        helpingScore: currentScore + 10,
-        totalHelped: totalHelped + 1,
-        lastHelped: serverTimestamp()
-      });
-    }
-
-    return { success: true };
+      console.log('Help requests updated:', requests.length);
+      callback({ success: true, data: requests });
+    }, (error) => {
+      console.error('Subscribe to help requests error:', error);
+      callback({ success: false, error: error.message });
+    });
+    
+    return unsubscribe;
   } catch (error) {
-    console.error('Complete help error:', error);
-    return { success: false, error: error.message };
+    console.error('Subscribe to help requests error:', error);
+    return () => {};
   }
 };
 
 // ============================================
-// REAL-TIME LOCATION TRACKING
+// LOCATION OPERATIONS
 // ============================================
 
 export const updateUserLocation = async (userId, location) => {
   try {
     const locationRef = doc(db, 'liveLocations', userId);
     
-    await setDoc(locationRef, {
-      userId,
+    const locationData = {
+      userId: userId,
       latitude: location.latitude,
       longitude: location.longitude,
-      accuracy: location.accuracy || null,
-      heading: location.heading || null,
-      speed: location.speed || null,
-      timestamp: serverTimestamp(),
+      accuracy: location.accuracy || 0,
+      heading: location.heading || 0,
+      speed: location.speed || 0,
+      timestamp: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    }, { merge: true });
-
+    };
+    
+    await setDoc(locationRef, locationData);
+    
     return { success: true };
   } catch (error) {
     console.error('Update location error:', error);
@@ -439,25 +430,34 @@ export const updateUserLocation = async (userId, location) => {
 };
 
 export const subscribeToLiveLocations = (callback) => {
-  const locationsRef = collection(db, 'liveLocations');
-  
-  return onSnapshot(locationsRef, (snapshot) => {
-    const locations = [];
+  try {
+    const locationsRef = collection(db, 'liveLocations');
     
-    snapshot.forEach((doc) => {
-      locations.push({ id: doc.id, ...doc.data() });
+    const unsubscribe = onSnapshot(locationsRef, (querySnapshot) => {
+      const locations = [];
+      querySnapshot.forEach((doc) => {
+        locations.push({ id: doc.id, ...doc.data() });
+      });
+      
+      callback({ success: true, data: locations });
+    }, (error) => {
+      console.error('Subscribe to locations error:', error);
+      callback({ success: false, error: error.message });
     });
-
-    callback({ success: true, data: locations });
-  }, (error) => {
-    callback({ success: false, error: error.message });
-  });
+    
+    return unsubscribe;
+  } catch (error) {
+    console.error('Subscribe to locations error:', error);
+    return () => {};
+  }
 };
 
 export const removeLiveLocation = async (userId) => {
   try {
     const locationRef = doc(db, 'liveLocations', userId);
     await deleteDoc(locationRef);
+    
+    console.log('Location removed:', userId);
     
     return { success: true };
   } catch (error) {
@@ -467,30 +467,32 @@ export const removeLiveLocation = async (userId) => {
 };
 
 // ============================================
-// REAL-TIME CHAT
+// CHAT OPERATIONS
 // ============================================
 
 export const sendMessage = async (chatId, senderId, senderName, message) => {
   try {
-    const messagesRef = collection(db, 'chats', chatId, 'messages');
+    const messageRef = doc(collection(db, `chats/${chatId}/messages`));
     
     const messageData = {
-      senderId,
-      senderName,
-      message,
-      timestamp: serverTimestamp(),
+      messageId: messageRef.id,
+      senderId: senderId,
+      senderName: senderName,
+      message: message,
+      timestamp: new Date().toISOString(),
       read: false
     };
-
-    await addDoc(messagesRef, messageData);
-
+    
+    await setDoc(messageRef, messageData);
+    
+    // Update chat metadata
     const chatRef = doc(db, 'chats', chatId);
     await setDoc(chatRef, {
       lastMessage: message,
-      lastMessageTime: serverTimestamp(),
-      lastSender: senderName
+      lastMessageTime: new Date().toISOString(),
+      lastSender: senderId
     }, { merge: true });
-
+    
     return { success: true };
   } catch (error) {
     console.error('Send message error:', error);
@@ -499,39 +501,51 @@ export const sendMessage = async (chatId, senderId, senderName, message) => {
 };
 
 export const subscribeToChat = (chatId, callback) => {
-  const messagesRef = collection(db, 'chats', chatId, 'messages');
-  const q = query(messagesRef, orderBy('timestamp', 'asc'));
-
-  return onSnapshot(q, (snapshot) => {
-    const messages = [];
+  try {
+    const messagesRef = collection(db, `chats/${chatId}/messages`);
+    const q = query(messagesRef, orderBy('timestamp', 'asc'));
     
-    snapshot.forEach((doc) => {
-      messages.push({ id: doc.id, ...doc.data() });
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const messages = [];
+      querySnapshot.forEach((doc) => {
+        messages.push(doc.data());
+      });
+      
+      callback({ success: true, data: messages });
+    }, (error) => {
+      console.error('Subscribe to chat error:', error);
+      callback({ success: false, error: error.message });
     });
-
-    callback({ success: true, data: messages });
-  }, (error) => {
-    callback({ success: false, error: error.message });
-  });
+    
+    return unsubscribe;
+  } catch (error) {
+    console.error('Subscribe to chat error:', error);
+    return () => {};
+  }
 };
 
 // ============================================
-// REPORT & BLOCK SYSTEM
+// REPORT & BLOCK OPERATIONS
 // ============================================
 
 export const reportUser = async (reporterId, reportedUserId, reason) => {
   try {
-    const reportsRef = collection(db, 'reports');
+    const reportRef = doc(collection(db, 'reports'));
     
-    await addDoc(reportsRef, {
-      reporterId,
-      reportedUserId,
-      reason,
+    const reportData = {
+      reportId: reportRef.id,
+      reporterId: reporterId,
+      reportedUserId: reportedUserId,
+      reason: reason,
       status: 'pending',
-      createdAt: serverTimestamp()
-    });
-
-    return { success: true, message: 'Report submitted' };
+      createdAt: new Date().toISOString()
+    };
+    
+    await setDoc(reportRef, reportData);
+    
+    console.log('User reported');
+    
+    return { success: true };
   } catch (error) {
     console.error('Report user error:', error);
     return { success: false, error: error.message };
@@ -542,18 +556,23 @@ export const blockUser = async (userId, blockedUserId) => {
   try {
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
-
+    
     if (!userSnap.exists()) {
       return { success: false, error: 'User not found' };
     }
-
+    
     const blockedUsers = userSnap.data().blockedUsers || [];
     
     if (!blockedUsers.includes(blockedUserId)) {
       blockedUsers.push(blockedUserId);
-      await updateDoc(userRef, { blockedUsers });
+      
+      await updateDoc(userRef, {
+        blockedUsers: blockedUsers
+      });
     }
-
+    
+    console.log('User blocked');
+    
     return { success: true };
   } catch (error) {
     console.error('Block user error:', error);
@@ -562,26 +581,47 @@ export const blockUser = async (userId, blockedUserId) => {
 };
 
 // ============================================
-// UTILITY FUNCTIONS
+// CACHE OPERATIONS
 // ============================================
-
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-};
 
 export const getCurrentUserFromCache = async () => {
   try {
-    const userData = await AsyncStorage.getItem('currentUser');
-    return userData ? JSON.parse(userData) : null;
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const cachedUser = await AsyncStorage.getItem('currentUser');
+    
+    if (cachedUser) {
+      return { success: true, data: JSON.parse(cachedUser) };
+    }
+    
+    return { success: false };
   } catch (error) {
-    return null;
+    console.error('Get cached user error:', error);
+    return { success: false };
   }
+};
+
+export default {
+  checkUsernameAvailability,
+  createUsernameDocument,
+  searchUserByUsername,
+  createUserProfile,
+  getUserProfile,
+  updateUserProfile,
+  deleteUserProfile,
+  getAllUsers,
+  subscribeToAllUsers,
+  uploadProfileImage,
+  deleteProfileImage,
+  setUserOnlineStatus,
+  subscribeToUserPresence,
+  createHelpRequest,
+  subscribeToNearbyHelpRequests,
+  updateUserLocation,
+  subscribeToLiveLocations,
+  removeLiveLocation,
+  sendMessage,
+  subscribeToChat,
+  reportUser,
+  blockUser,
+  getCurrentUserFromCache
 };
