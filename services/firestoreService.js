@@ -42,7 +42,8 @@ export const checkUsernameAvailability = async (username) => {
     return {
       success: false,
       available: false,
-      error: error.message
+      error: error.message,
+      code: error.code
     };
   }
 };

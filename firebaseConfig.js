@@ -7,14 +7,14 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Your Firebase configuration
+// Use the Web app apiKey/appId for the Firebase JS SDK in Expo/RN (not the Android-restricted key from google-services.json).
 const firebaseConfig = {
-  apiKey: "AIzaSyCR34xAzwjLJAmsbIbBXuC_udV2rbQwgMo",
+  apiKey: "AIzaSyB2KF8TRejRghM3ZVUd8WTt39w5uXMITxc",
   authDomain: "zerotrap-d81fd.firebaseapp.com",
   projectId: "zerotrap-d81fd",
   storageBucket: "zerotrap-d81fd.firebasestorage.app",
   messagingSenderId: "411206037583",
-  appId: "1:411206037583:android:9d03c60e6f43d08d5dfa3a"
+  appId: "1:411206037583:web:43bca0fe892f7ac85dfa3a"
 };
 
 // Single Firebase app instance (avoids "already exists" on Fast Refresh)

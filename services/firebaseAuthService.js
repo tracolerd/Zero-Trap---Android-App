@@ -10,10 +10,48 @@ import {
   updateProfile,
   deleteUser
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from '../firebaseConfig';
 import { removePushToken } from './notificationService';
+
+/** Maps Firebase Auth / Firestore errors to actionable text (release APK often hits API key + rules issues). */
+function formatFirebaseError(error, fallbackMessage = 'Something went wrong') {
+  if (!error) return fallbackMessage;
+
+  const code = typeof error.code === 'string' ? error.code : '';
+  const message = typeof error.message === 'string' ? error.message : '';
+
+  if (code === 'auth/network-request-failed') {
+    return (
+      'Cannot reach Firebase. If this only happens in an installed APK (not Expo Go): Firebase Console → Project settings → Your Android app → add the SHA-1 of your release/upload keystore, then replace google-services.json. In Google Cloud → APIs & Services → Credentials, ensure the API key allows Android app com.zerotrap.emergency with that same SHA-1 (or use an unrestricted key for testing).'
+    );
+  }
+
+  if (code === 'permission-denied') {
+    return (
+      'Firestore denied this request. Deploy the firestore.rules file from this project (firebase deploy --only firestore:rules) or update rules: usernames must allow unauthenticated get for signup checks; users/{uid} must allow the signed-in user to create/update their own document.'
+    );
+  }
+
+  if (code === 'unavailable' || code === 'deadline-exceeded') {
+    return 'Firebase is busy or unreachable. Try again shortly.';
+  }
+
+  if (/api[- ]?key/i.test(message) && /invalid|not valid|denied/i.test(message)) {
+    return 'API key rejected. In Google Cloud Console → Credentials, fix key restrictions for Android package com.zerotrap.emergency (include your release keystore SHA-1) or temporarily set Application restrictions to None to verify.';
+  }
+
+  if (code.startsWith('auth/') && message) {
+    return `${message} (${code})`;
+  }
+
+  if (message) {
+    return code ? `${message} (${code})` : message;
+  }
+
+  return fallbackMessage;
+}
 
 // Get current user
 export const getCurrentUser = () => {
@@ -47,7 +85,9 @@ export const checkUsernameAvailability = async (username) => {
     console.error('Check username error:', error);
     return {
       success: false,
-      error: error.message
+      error: error.message,
+      code: error.code,
+      available: false
     };
   }
 };
@@ -69,7 +109,7 @@ const createUsernameDocument = async (username, userId) => {
     return { success: true };
   } catch (error) {
     console.error('Create username document error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error.message, code: error.code };
   }
 };
 
@@ -112,7 +152,7 @@ const createUserProfile = async (userId, userData) => {
     return { success: true };
   } catch (error) {
     console.error('Create user profile error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error.message, code: error.code };
   }
 };
 
@@ -157,7 +197,10 @@ export const registerWithEmail = async (email, password, name, username, gender)
     if (!usernameCheck.success) {
       return {
         success: false,
-        error: 'Failed to check username availability'
+        error: formatFirebaseError(
+          { message: usernameCheck.error, code: usernameCheck.code },
+          'Failed to check username availability'
+        )
       };
     }
 
@@ -193,7 +236,9 @@ export const registerWithEmail = async (email, password, name, username, gender)
       const usernameResult = await createUsernameDocument(cleanUsername, user.uid);
       
       if (!usernameResult.success) {
-        throw new Error('Failed to create username document');
+        const err = new Error(usernameResult.error || 'Failed to create username document');
+        err.code = usernameResult.code;
+        throw err;
       }
       
       console.log('✅ Username document created');
@@ -209,7 +254,9 @@ export const registerWithEmail = async (email, password, name, username, gender)
       });
 
       if (!profileResult.success) {
-        throw new Error('Failed to create user profile');
+        const err = new Error(profileResult.error || 'Failed to create user profile');
+        err.code = profileResult.code;
+        throw err;
       }
       
       console.log('✅ User profile created');
@@ -243,23 +290,19 @@ export const registerWithEmail = async (email, password, name, username, gender)
   } catch (error) {
     console.error('❌ Registration error:', error);
 
-    let errorMessage = 'Registration failed';
-
     if (error.code === 'auth/email-already-in-use') {
-      errorMessage = 'Email already registered';
-    } else if (error.code === 'auth/weak-password') {
-      errorMessage = 'Password should be at least 6 characters';
-    } else if (error.code === 'auth/invalid-email') {
-      errorMessage = 'Invalid email address';
-    } else if (error.code === 'auth/network-request-failed') {
-      errorMessage = 'Network error. Check your connection.';
-    } else if (error.message) {
-      errorMessage = error.message;
+      return { success: false, error: 'Email already registered' };
+    }
+    if (error.code === 'auth/weak-password') {
+      return { success: false, error: 'Password should be at least 6 characters' };
+    }
+    if (error.code === 'auth/invalid-email') {
+      return { success: false, error: 'Invalid email address' };
     }
 
     return {
       success: false,
-      error: errorMessage
+      error: formatFirebaseError(error, 'Registration failed')
     };
   }
 };
@@ -285,23 +328,22 @@ export const signInWithEmail = async (email, password) => {
   } catch (error) {
     console.error('❌ Sign in error:', error);
 
-    let errorMessage = 'Login failed';
-
     if (error.code === 'auth/user-not-found') {
-      errorMessage = 'No account found with this email';
-    } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-      errorMessage = 'Incorrect email or password';
-    } else if (error.code === 'auth/invalid-email') {
-      errorMessage = 'Invalid email address';
-    } else if (error.code === 'auth/user-disabled') {
-      errorMessage = 'Account has been disabled';
-    } else if (error.code === 'auth/network-request-failed') {
-      errorMessage = 'Network error. Check your connection.';
+      return { success: false, error: 'No account found with this email' };
+    }
+    if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      return { success: false, error: 'Incorrect email or password' };
+    }
+    if (error.code === 'auth/invalid-email') {
+      return { success: false, error: 'Invalid email address' };
+    }
+    if (error.code === 'auth/user-disabled') {
+      return { success: false, error: 'Account has been disabled' };
     }
 
     return {
       success: false,
-      error: errorMessage
+      error: formatFirebaseError(error, 'Login failed')
     };
   }
 };
@@ -344,17 +386,16 @@ export const resetPassword = async (email) => {
   } catch (error) {
     console.error('Reset password error:', error);
 
-    let errorMessage = 'Failed to send reset email';
-
     if (error.code === 'auth/user-not-found') {
-      errorMessage = 'No account found with this email';
-    } else if (error.code === 'auth/invalid-email') {
-      errorMessage = 'Invalid email address';
+      return { success: false, error: 'No account found with this email' };
+    }
+    if (error.code === 'auth/invalid-email') {
+      return { success: false, error: 'Invalid email address' };
     }
 
     return {
       success: false,
-      error: errorMessage
+      error: formatFirebaseError(error, 'Failed to send reset email')
     };
   }
 };

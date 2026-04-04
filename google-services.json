@@ -14,14 +14,6 @@
       },
       "oauth_client": [
         {
-          "client_id": "411206037583-r8k0j8epj2for3ki406geib38es66gsi.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.zerotrap.emergency",
-            "certificate_hash": "a58841048d06249fd5e952813b952d8e85c3e9c4"
-          }
-        },
-        {
           "client_id": "411206037583-ulst0srtshlag3hp1da0gajdmivvsnjq.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
