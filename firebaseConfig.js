@@ -1,7 +1,7 @@
 // firebaseConfig.js
 // Complete Firebase Configuration for Zero Trap
 
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
@@ -17,13 +17,18 @@ const firebaseConfig = {
   appId: "1:411206037583:android:9d03c60e6f43d08d5dfa3a"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Single Firebase app instance (avoids "already exists" on Fast Refresh)
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Auth with AsyncStorage persistence
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+// Initialize Auth with AsyncStorage persistence (getAuth fallback avoids crash on Fast Refresh)
+let auth;
+try {
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage)
+  });
+} catch (e) {
+  auth = getAuth(app);
+}
 
 // Initialize Firestore
 const db = getFirestore(app);

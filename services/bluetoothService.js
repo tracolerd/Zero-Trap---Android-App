@@ -1,4 +1,4 @@
-import { Platform, PermissionsAndroid, Alert } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 
 // Request Bluetooth permissions
 export const requestBluetoothPermission = async () => {

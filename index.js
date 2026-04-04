@@ -1,6 +1,7 @@
 // index.js
 // Main entry point
 
+import 'react-native-gesture-handler';
 import { registerRootComponent } from 'expo';
 import App from './App';
 

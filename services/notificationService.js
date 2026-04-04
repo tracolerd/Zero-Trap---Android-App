@@ -1,7 +1,8 @@
 // services/notificationService.js
 // Firebase Cloud Messaging - Real-time Push Notifications
-import { doc, updateDoc, getDoc, getDocs, collection } from 'firebase/firestore';
+import { doc, setDoc, getDoc, getDocs, collection } from 'firebase/firestore';
 import * as Notifications from 'expo-notifications';
+import { SchedulableTriggerInputTypes } from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { db } from '../firebaseConfig';
@@ -46,13 +47,17 @@ export const registerForPushNotifications = async (userId) => {
       projectId: 'a4292b6d-747f-46d3-8d5b-034b2608ddcd'
     });
 
-    // Save token to Firestore
+    // Save token to Firestore (merge so it works if the profile row is still syncing)
     if (userId && token.data) {
       const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        pushToken: token.data,
-        pushTokenUpdatedAt: new Date().toISOString()
-      });
+      await setDoc(
+        userRef,
+        {
+          pushToken: token.data,
+          pushTokenUpdatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
     }
 
     // Configure Android channel
@@ -241,7 +246,10 @@ export const scheduleTestNotification = async () => {
         body: 'Zero Trap notification system working!',
         data: { test: true },
       },
-      trigger: { seconds: 2 },
+      trigger: {
+        type: SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 2,
+      },
     });
 
     return { success: true };
@@ -314,10 +322,14 @@ export const removePushToken = async (userId) => {
     if (!userId) return { success: false };
 
     const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
-      pushToken: null,
-      pushTokenUpdatedAt: new Date().toISOString()
-    });
+    await setDoc(
+      userRef,
+      {
+        pushToken: null,
+        pushTokenUpdatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
 
     return { success: true };
 

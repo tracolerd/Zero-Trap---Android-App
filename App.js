@@ -1,10 +1,10 @@
 // App.js
 // FINAL - Fixed navigation and white screen
 
-import 'react-native-gesture-handler';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebaseConfig';
@@ -12,61 +12,42 @@ import AppNavigator from './navigation/AppNavigator';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
-  const [initialRouteName, setInitialRouteName] = useState('Splash');
+  const [initialRouteName, setInitialRouteName] = useState('Login');
+  const initialAuthResolved = useRef(false);
 
   useEffect(() => {
-    initializeApp();
-  }, []);
+    let cancelled = false;
 
-  const initializeApp = async () => {
-    try {
-      console.log('🚀 App initializing...');
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (cancelled) return;
 
-      // Wait for Firebase to initialize
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Check auth state
-      const user = auth.currentUser;
-      const cachedUserId = await AsyncStorage.getItem('userId');
-
-      console.log('Firebase user:', user?.email);
-      console.log('Cached userId:', cachedUserId);
-
-      if (user && cachedUserId) {
-        console.log('✅ User authenticated, going to Home');
-        setInitialRouteName('Home');
-      } else {
-        console.log('❌ No user, going to Login');
-        setInitialRouteName('Login');
+      try {
+        if (user) {
+          await AsyncStorage.setItem('userId', user.uid);
+          await AsyncStorage.setItem('userEmail', user.email || '');
+        } else {
+          await AsyncStorage.removeItem('userId');
+          await AsyncStorage.removeItem('userEmail');
+          await AsyncStorage.removeItem('currentUser');
+        }
+      } catch (e) {
+        console.error('Auth storage sync error:', e);
       }
 
-      // Setup auth listener
-      setupAuthListener();
+      if (cancelled) return;
 
-      setIsReady(true);
-    } catch (error) {
-      console.error('❌ Initialization error:', error);
-      setInitialRouteName('Login');
-      setIsReady(true);
-    }
-  };
-
-  const setupAuthListener = () => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        console.log('Auth changed: User logged in -', user.email);
-        await AsyncStorage.setItem('userId', user.uid);
-        await AsyncStorage.setItem('userEmail', user.email || '');
-      } else {
-        console.log('Auth changed: User logged out');
-        await AsyncStorage.removeItem('userId');
-        await AsyncStorage.removeItem('userEmail');
-        await AsyncStorage.removeItem('currentUser');
+      if (!initialAuthResolved.current) {
+        initialAuthResolved.current = true;
+        setInitialRouteName(user ? 'Home' : 'Login');
+        setIsReady(true);
       }
     });
 
-    return unsubscribe;
-  };
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   if (!isReady) {
     return (
@@ -84,10 +65,12 @@ export default function App() {
   console.log('📱 Rendering app with initial route:', initialRouteName);
 
   return (
-    <NavigationContainer>
-      <StatusBar backgroundColor="#FF3B30" barStyle="light-content" />
-      <AppNavigator initialRoute={initialRouteName} />
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <StatusBar backgroundColor="#FF3B30" barStyle="light-content" />
+        <AppNavigator initialRoute={initialRouteName} />
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }
 

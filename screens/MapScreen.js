@@ -27,7 +27,8 @@ import {
 const MapScreen = ({ navigation, route }) => {
   const { mode } = route.params || {}; // 'seek' or undefined
   const mapRef = useRef(null);
-  
+  const liveLocationsUnsubRef = useRef(null);
+
   const [userLocation, setUserLocation] = useState(null);
   const [liveLocations, setLiveLocations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,8 +37,12 @@ const MapScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     requestLocationPermission();
-    
+
     return () => {
+      if (liveLocationsUnsubRef.current) {
+        liveLocationsUnsubRef.current();
+        liveLocationsUnsubRef.current = null;
+      }
       stopTracking();
     };
   }, []);
@@ -89,17 +94,16 @@ const MapScreen = ({ navigation, route }) => {
         await startTracking(coords);
       }
 
-      // Subscribe to live locations
-      const unsubscribe = subscribeToLiveLocations((result) => {
+      if (liveLocationsUnsubRef.current) {
+        liveLocationsUnsubRef.current();
+      }
+      liveLocationsUnsubRef.current = subscribeToLiveLocations((result) => {
         if (result.success) {
           setLiveLocations(result.data);
         }
       });
 
       setLoading(false);
-
-      // Cleanup
-      return () => unsubscribe();
     } catch (err) {
       console.error('Location error:', err);
       setError(err.message);
@@ -119,7 +123,11 @@ const MapScreen = ({ navigation, route }) => {
   const startTracking = async (coords) => {
     try {
       const userId = getCurrentUserId();
-      
+      if (!userId) {
+        console.warn('startTracking: no user id');
+        return;
+      }
+
       // Update location in Firestore
       await updateUserLocation(userId, {
         latitude: coords.latitude,
@@ -136,7 +144,9 @@ const MapScreen = ({ navigation, route }) => {
   const stopTracking = async () => {
     try {
       const userId = getCurrentUserId();
-      await removeLiveLocation(userId);
+      if (userId) {
+        await removeLiveLocation(userId);
+      }
       setTracking(false);
     } catch (err) {
       console.error('Stop tracking error:', err);
@@ -251,7 +261,7 @@ const MapScreen = ({ navigation, route }) => {
               latitude: loc.latitude,
               longitude: loc.longitude,
             }}
-            title={`User ${loc.userId.substring(0, 6)}`}
+            title={`User ${(loc.userId || loc.id || '?').toString().substring(0, 6)}`}
             description="Helper nearby"
             pinColor="#34C759"
             onPress={() => handleMarkerPress(loc)}

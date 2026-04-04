@@ -13,9 +13,7 @@ import {
   orderBy,
   limit,
   getDocs,
-  onSnapshot,
-  serverTimestamp,
-  Timestamp
+  onSnapshot
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../firebaseConfig';
@@ -321,13 +319,19 @@ export const subscribeToUserPresence = (userId, callback) => {
   try {
     const userRef = doc(db, 'users', userId);
     
-    const unsubscribe = onSnapshot(userRef, (doc) => {
-      if (doc.exists()) {
-        const userData = doc.data();
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const userData = docSnap.data();
         callback({
           success: true,
           isOnline: userData.isOnline || false,
           lastSeen: userData.lastSeen
+        });
+      } else {
+        callback({
+          success: true,
+          isOnline: false,
+          lastSeen: null
         });
       }
     }, (error) => {

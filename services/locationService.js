@@ -27,12 +27,21 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
     if (location) {
       try {
         // Get current user ID from storage
+        let userId = null;
         const userDataStr = await AsyncStorage.getItem('currentUser');
-        
         if (userDataStr) {
-          const userData = JSON.parse(userDataStr);
-          const userId = userData.userId;
+          try {
+            const userData = JSON.parse(userDataStr);
+            userId = userData.userId || null;
+          } catch (_) {
+            userId = null;
+          }
+        }
+        if (!userId) {
+          userId = await AsyncStorage.getItem('userId');
+        }
 
+        if (userId) {
           // Check if emergency mode is active
           const emergencyMode = await AsyncStorage.getItem('emergencyMode');
           

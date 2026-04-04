@@ -15,7 +15,7 @@ import {
   Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { registerWithEmail } from '../services/firebaseAuthService';
+import { registerWithEmail, signOut } from '../services/firebaseAuthService';
 import { checkUsernameAvailability } from '../services/firestoreService';
 
 const RegisterScreen = ({ navigation }) => {
@@ -153,6 +153,8 @@ const RegisterScreen = ({ navigation }) => {
 
       if (result.success) {
         console.log('✅ Registration successful!');
+        // createUserWithEmailAndPassword leaves an active session; sign out so "verify then login" is real
+        await signOut();
 
         Alert.alert(
           'Success! 🎉',

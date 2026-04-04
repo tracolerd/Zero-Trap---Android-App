@@ -8,12 +8,12 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   updateProfile,
-  deleteUser,
-  onAuthStateChanged
+  deleteUser
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from '../firebaseConfig';
+import { removePushToken } from './notificationService';
 
 // Get current user
 export const getCurrentUser = () => {
@@ -289,8 +289,8 @@ export const signInWithEmail = async (email, password) => {
 
     if (error.code === 'auth/user-not-found') {
       errorMessage = 'No account found with this email';
-    } else if (error.code === 'auth/wrong-password') {
-      errorMessage = 'Incorrect password';
+    } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      errorMessage = 'Incorrect email or password';
     } else if (error.code === 'auth/invalid-email') {
       errorMessage = 'Invalid email address';
     } else if (error.code === 'auth/user-disabled') {
@@ -309,6 +309,10 @@ export const signInWithEmail = async (email, password) => {
 // Sign out
 export const signOut = async () => {
   try {
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      await removePushToken(uid).catch(() => {});
+    }
     await firebaseSignOut(auth);
     
     // Clear AsyncStorage

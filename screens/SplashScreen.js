@@ -16,11 +16,11 @@ const SplashScreen = ({ navigation }) => {
       // Wait a bit for Firebase to initialize
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Check if user is logged in
+      // Check if user is logged in (userId matches App.js; currentUser may load later on Home)
       const firebaseUser = getCurrentUser();
-      const cachedUser = await AsyncStorage.getItem('currentUser');
+      const cachedUserId = await AsyncStorage.getItem('userId');
 
-      if (firebaseUser && cachedUser) {
+      if (firebaseUser && cachedUserId) {
         // User is logged in
         console.log('User found, navigating to Home');
         navigation.replace('Home');
