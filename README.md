@@ -1,10 +1,6 @@
 🚨 Zero Trap - Emergency Help Network
 <div align="center">
-https://img.shields.io/badge/Zero%20Trap-Emergency%20Help-FF3B30?style=for-the-badge&logo=android&logoColor=white
 A community-driven emergency help network connecting people in need with nearby helpers in real-time.
-https://reactnative.dev/
-https://expo.dev/
-https://firebase.google.com/
 Features • Screenshots • Installation • Tech Stack • Architecture • Contributing
 </div>
 
@@ -170,19 +166,6 @@ Android Studio (for Android development)
 EAS CLI (for building)
 Firebase account
 Google Cloud account (for Maps API)
-
-Quick Start
-
-Clone the repository
-
-bash   git clone https://github.com/yourusername/zero-trap.git
-   cd zero-trap
-
-Install dependencies
-
-bash   npm install
-
-Configure Firebase
 
 Create a Firebase project at Firebase Console
 Enable Authentication (Email/Password)
@@ -563,7 +546,7 @@ All contributors and testers
 
 
 📞 Support
-For support, email your.email@gmail.com or open an issue in the repository.
+For support, email scrollfaiyaz@gmail.com or open an issue in the repository.
 
 🌟 Star History
 Show Image
