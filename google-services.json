@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "411206037583",
+    "project_id": "zerotrap-d81fd",
+    "storage_bucket": "zerotrap-d81fd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:411206037583:android:9d03c60e6f43d08d5dfa3a",
+        "android_client_info": {
+          "package_name": "com.zerotrap.emergency"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "411206037583-ulst0srtshlag3hp1da0gajdmivvsnjq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zerotrap.emergency",
+            "certificate_hash": "9e00b232b0070c29f74a1b1bab34f76c3c5d6c9f"
+          }
+        },
+        {
+          "client_id": "411206037583-dgfnulikji31sieomi26pujl234amq3v.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCR34xAzwjLJAmsbIbBXuC_udV2rbQwgMo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "411206037583-dgfnulikji31sieomi26pujl234amq3v.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
