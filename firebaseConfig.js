@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Use the Web app apiKey/appId for the Firebase JS SDK in Expo/RN (not the Android-restricted key from google-services.json).
 const firebaseConfig = {
-  apiKey: "AIzaSyB2KF8TRejRghM3ZVUd8WTt39w5uXMITxc",
+  apiKey: "Secret",
   authDomain: "zerotrap-d81fd.firebaseapp.com",
   projectId: "zerotrap-d81fd",
   storageBucket: "zerotrap-d81fd.firebasestorage.app",
