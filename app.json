@@ -39,7 +39,7 @@
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyCR34xAzwjLJAmsbIbBXuC_udV2rbQwgMo"
+          "apiKey": "Secret"
         }
       }
     },
