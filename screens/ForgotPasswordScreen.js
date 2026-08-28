@@ -9,7 +9,9 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { sendPasswordReset, validateGmail } from '../services/firebaseAuthService';
+import { resetPassword } from '../services/firebaseAuthService';
+
+const validateGmail = (email) => email.toLowerCase().trim().endsWith('@gmail.com');
 
 const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -28,7 +30,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
 
     setLoading(true);
 
-    const result = await sendPasswordReset(email.trim().toLowerCase());
+    const result = await resetPassword(email.trim().toLowerCase());
 
     setLoading(false);
 

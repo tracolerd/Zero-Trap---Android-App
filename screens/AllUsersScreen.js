@@ -26,30 +26,32 @@ const AllUsersScreen = ({ navigation }) => {
   useEffect(() => {
     // Subscribe to users with real-time updates
     const unsubscribe = subscribeToAllUsers(async (result) => {
-      if (result.success) {
-        // Filter out deleted users and current user
-        const validUsers = [];
-        
-        for (const user of result.data) {
-          // Skip current user
-          if (user.userId === currentUserId) continue;
-          
-          // Verify user still exists (check if profile is complete)
-          if (user.userId && user.username && user.email) {
-            // Double-check user exists in Firestore
-            const userCheck = await getUserProfile(user.userId);
-            if (userCheck.success && userCheck.data) {
-              validUsers.push(user);
-            } else {
-              console.log('⚠️ User deleted but still in cache:', user.username);
-            }
+      if (!result.success) {
+        console.error('All users subscription error:', result.error);
+        setUsers([]);
+        setFilteredUsers([]);
+        setLoading(false);
+        return;
+      }
+
+      const validUsers = [];
+
+      for (const user of result.data) {
+        if (user.userId === currentUserId) continue;
+
+        if (user.userId && user.username && user.email) {
+          const userCheck = await getUserProfile(user.userId);
+          if (userCheck.success && userCheck.data) {
+            validUsers.push(user);
+          } else {
+            console.log('⚠️ User deleted but still in cache:', user.username);
           }
         }
-        
-        setUsers(validUsers);
-        setFilteredUsers(validUsers);
-        setLoading(false);
       }
+
+      setUsers(validUsers);
+      setFilteredUsers(validUsers);
+      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -183,7 +185,7 @@ const AllUsersScreen = ({ navigation }) => {
       <FlatList
         data={filteredUsers}
         renderItem={renderUser}
-        keyExtractor={(item) => item.userId}
+        keyExtractor={(item, index) => (item.userId ? String(item.userId) : `user-${index}`)}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>

@@ -15,8 +15,8 @@ import {
   getDocs,
   onSnapshot
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { db, storage } from '../firebaseConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db } from '../firebaseConfig';
 
 // ============================================
 // USERNAME OPERATIONS
@@ -253,22 +253,6 @@ export const uploadProfileImage = async (userId, imageUri) => {
       success: false,
       error: 'Image upload requires Blaze plan. Please upgrade Firebase.'
     };
-    
-    // Uncomment when upgraded to Blaze:
-    /*
-    const response = await fetch(imageUri);
-    const blob = await response.blob();
-    
-    const filename = `profile_images/${userId}_${Date.now()}.jpg`;
-    const storageRef = ref(storage, filename);
-    
-    await uploadBytes(storageRef, blob);
-    const downloadURL = await getDownloadURL(storageRef);
-    
-    console.log('Image uploaded:', downloadURL);
-    
-    return { success: true, url: downloadURL };
-    */
   } catch (error) {
     console.error('Upload image error:', error);
     return { success: false, error: error.message };
@@ -279,15 +263,6 @@ export const deleteProfileImage = async (userId, imageUrl) => {
   try {
     console.warn('Delete image requires Blaze plan');
     return { success: false };
-    
-    // Uncomment when upgraded to Blaze:
-    /*
-    const imageRef = ref(storage, imageUrl);
-    await deleteObject(imageRef);
-    
-    console.log('Image deleted');
-    return { success: true };
-    */
   } catch (error) {
     console.error('Delete image error:', error);
     return { success: false, error: error.message };
@@ -591,7 +566,6 @@ export const blockUser = async (userId, blockedUserId) => {
 
 export const getCurrentUserFromCache = async () => {
   try {
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
     const cachedUser = await AsyncStorage.getItem('currentUser');
     
     if (cachedUser) {

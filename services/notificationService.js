@@ -191,6 +191,50 @@ export const sendChatNotification = async (
 };
 
 // ============================================
+// HELP CHAT (local notifications — used by HelpChatScreen)
+// ============================================
+
+export const sendHelperAcceptedNotification = async (helperName) => {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '✅ Helper accepted',
+        body: `${helperName || 'Helper'} is coming to help.`,
+        data: { type: 'helper_accepted' },
+      },
+      trigger: {
+        type: SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 1,
+      },
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('sendHelperAcceptedNotification:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const sendTaskCompleteNotification = async (newScore) => {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '🎉 Help completed',
+        body: `Your helping score is now ${newScore}.`,
+        data: { type: 'task_complete', score: String(newScore) },
+      },
+      trigger: {
+        type: SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 1,
+      },
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('sendTaskCompleteNotification:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ============================================
 // NOTIFICATION LISTENERS
 // ============================================
 

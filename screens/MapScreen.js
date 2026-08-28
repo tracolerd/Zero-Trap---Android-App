@@ -14,10 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
-import {
-  getCurrentUserId,
-  getCurrentUser
-} from '../services/firebaseAuthService';
+import { getCurrentUserId } from '../services/firebaseAuthService';
 import {
   updateUserLocation,
   subscribeToLiveLocations,
