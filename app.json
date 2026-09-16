@@ -39,7 +39,7 @@
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyCR34xAzwjLJAmsbIbBXuC_udV2rbQwgMo"
+          "apiKey": "SECRET"
         }
       }
     },
@@ -69,7 +69,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "a4292b6d-747f-46d3-8d5b-034b2608ddcd"
+        "projectId": "SECRET"
       }
     }
   }
