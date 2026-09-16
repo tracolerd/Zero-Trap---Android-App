@@ -1,280 +1,202 @@
 <div align="center">
 
-# 🚨 Zero Trap
+<img src="assets/icon.png" alt="Zero Trap app icon" width="112" />
 
-### Emergency Help, One Tap Away.
+# Zero Trap
 
-**Zero Trap** is a community-driven emergency assistance app designed to connect people who need urgent help with nearby volunteers through location-aware, real-time communication.
+### Emergency help, one tap away.
 
-<br />
+Zero Trap is a community-powered emergency assistance app that helps people request urgent support and connects them with nearby volunteers through location-aware, real-time communication.
 
-[![React Native](https://img.shields.io/badge/React%20Native-0.76.9-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactnative.dev/)
-[![Expo](https://img.shields.io/badge/Expo-52-000020?style=for-the-badge&logo=expo&logoColor=FFFFFF)](https://expo.dev/)
-[![Firebase](https://img.shields.io/badge/Firebase-10.7.1-FFCA28?style=for-the-badge&logo=firebase&logoColor=000000)](https://firebase.google.com/)
-[![Android](https://img.shields.io/badge/Android-Supported-3DDC84?style=for-the-badge&logo=android&logoColor=FFFFFF)](https://www.android.com/)
-[![License](https://img.shields.io/github/license/tracolerd/Zero-Trap---Android-App?style=for-the-badge)](LICENSE)
+<p>
+  <a href="https://github.com/tracolerd/Zero-Trap---Android-App/stargazers"><img src="https://img.shields.io/github/stars/tracolerd/Zero-Trap---Android-App?style=flat-square&logo=github&color=ffb000" alt="GitHub stars" /></a>
+  <a href="https://github.com/tracolerd/Zero-Trap---Android-App/network/members"><img src="https://img.shields.io/github/forks/tracolerd/Zero-Trap---Android-App?style=flat-square&logo=github&color=5865f2" alt="GitHub forks" /></a>
+  <a href="https://github.com/tracolerd/Zero-Trap---Android-App/blob/main/LICENSE"><img src="https://img.shields.io/github/license/tracolerd/Zero-Trap---Android-App?style=flat-square&color=2ea44f" alt="License" /></a>
+  <a href="https://github.com/tracolerd/Zero-Trap---Android-App"><img src="https://img.shields.io/github/last-commit/tracolerd/Zero-Trap---Android-App?style=flat-square&color=ff3b30" alt="Last commit" /></a>
+</p>
 
-<br />
+<p>
+  <img src="https://img.shields.io/badge/React%20Native-0.76.9-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React Native 0.76.9" />
+  <img src="https://img.shields.io/badge/Expo%20SDK-52-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo SDK 52" />
+  <img src="https://img.shields.io/badge/Firebase-10.7.1-FFCA28?style=for-the-badge&logo=firebase&logoColor=black" alt="Firebase 10.7.1" />
+  <img src="https://img.shields.io/badge/Android-supported-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android supported" />
+</p>
 
-[Features](#-features) · [Tech Stack](#-tech-stack) · [Project Structure](#-project-structure) · [Setup](#-getting-started) · [Firebase](#-firebase-setup) · [Build](#-build) · [Roadmap](#-roadmap) · [Contributing](#-contributing)
+<p>
+  <a href="#-getting-started">Get started</a>
+  &nbsp;&bull;&nbsp;
+  <a href="#-how-it-works">How it works</a>
+  &nbsp;&bull;&nbsp;
+  <a href="#-roadmap">Roadmap</a>
+  &nbsp;&bull;&nbsp;
+  <a href="#-contributing">Contributing</a>
+</p>
 
 </div>
 
 ---
 
-## 📌 Overview
+## Why Zero Trap?
 
-Emergency situations are time-sensitive. **Zero Trap** is built around a simple idea: make it easier for a person in danger to request help and make it easier for nearby people to respond.
+Emergencies are time-sensitive. Zero Trap focuses on the few things that matter most when someone needs help:
 
-The application combines **location services, real-time data, authentication, messaging, notifications, and cloud infrastructure** into a single mobile experience.
+- **Fast requests** — create an emergency help request with minimal friction.
+- **Local awareness** — use location to surface nearby help opportunities.
+- **Connected response** — keep requesters and helpers in touch with real-time messaging.
+- **Responsible foundations** — combine authentication, permissions, cloud data, and notifications in one focused mobile experience.
 
 > **Mission:** Make emergency assistance more connected, more responsive, and more accessible.
 
----
-
 ## ✨ Features
 
-### 🆘 Emergency Assistance
-- Create emergency help requests.
-- Share the user's location with the help network.
-- Track active help situations.
-- Support both people requesting help and people responding to requests.
+| Experience | What it provides |
+| --- | --- |
+| 🆘 Emergency assistance | Create and track help requests for people who need urgent support. |
+| 📍 Location & maps | GPS-based location, nearby visibility, Google Maps, and Android background-location support. |
+| 💬 Real-time communication | Persistent, timestamped conversations backed by Firebase. |
+| 🔐 Authentication & profiles | Firebase Authentication, profile management, and local session persistence. |
+| 🔔 Notifications | Expo Notifications integration for emergency-related updates. |
+| 📷 Profile media | Camera and photo-library support for profile images with user-facing permission copy. |
 
-### 📍 Location & Maps
-- GPS-based location detection.
-- Nearby emergency/help visibility.
-- Google Maps integration through `react-native-maps`.
-- Background location capability configured for Android.
+## 🧭 How it works
 
-### 💬 Real-Time Communication
-- In-app communication during help sessions.
-- Persistent message data through Firebase.
-- Timestamped conversation records.
+```text
+  Request help
+       │
+       ▼
+  Share location ───────► Nearby helpers discover the request
+       │                                  │
+       └──────── Real-time messaging ◄────┘
+                          │
+                          ▼
+                    Coordinate support
+```
 
-### 🔐 Authentication & Profiles
-- Firebase Authentication integration.
-- User profile management.
-- Persistent local session/state storage with AsyncStorage.
+## 🛠 Technology
 
-### 🔔 Notifications
-- Expo Notifications integration.
-- Notification support for emergency-related events.
-- Android notification configuration included in the Expo project.
-
-### 📱 Media & Profiles
-- Profile image selection.
-- Camera and photo-library permissions.
-- User-facing permission messages for sensitive device capabilities.
-
----
-
-## 🛠 Tech Stack
+<div align="center">
 
 | Layer | Technology |
-| --- | --- |
-| Mobile Framework | React Native 0.76.9 |
-| App Platform | Expo SDK 52 |
+| :--- | :--- |
+| Mobile app | React Native 0.76.9 + Expo SDK 52 |
 | Language | JavaScript |
 | Navigation | React Navigation |
 | Backend | Firebase |
-| Database | Cloud Firestore |
+| Data | Cloud Firestore |
 | Authentication | Firebase Authentication |
-| Maps | React Native Maps / Google Maps |
-| Local Storage | AsyncStorage |
+| Maps | React Native Maps + Google Maps |
+| Local state | AsyncStorage |
+| Device services | Expo Location, Expo Device, Expo Task Manager |
 | Notifications | Expo Notifications |
-| Device Services | Expo Location, Expo Device, Expo Task Manager |
 | Media | Expo Image Picker |
-| Build & Deployment | Expo Application Services (EAS) |
+| Delivery | Expo Application Services (EAS) |
 
----
+</div>
 
-## 🧩 Project Structure
+## 📁 Project layout
 
 ```text
-Zero-Trap---Android-App/
-│
-├── assets/                  # App icons, splash assets and static resources
-├── .github/                 # GitHub configuration / workflows
-├── App.js                   # Application entry point
-├── app.json                 # Expo application configuration
-├── babel.config.js          # Babel configuration
-├── eas.json                 # EAS build configuration
-├── firebase.json            # Firebase project configuration
-├── firebaseConfig.js        # Firebase client configuration
-├── firestore.rules          # Firestore security rules
-├── package.json             # Dependencies and npm scripts
-├── LICENSE                  # Project license
-└── README.md                # Project documentation
+ZeroTrapApp/
+├── assets/             # App icons, splash assets, and static resources
+├── components/         # Reusable UI components
+├── navigation/         # Navigation configuration
+├── screens/            # Application screens
+├── services/           # Firebase and application services
+├── utils/              # Shared utilities
+├── scripts/            # Maintenance and administrative scripts
+├── App.js              # Application entry point
+├── app.json            # Expo configuration
+├── eas.json            # EAS build profiles
+├── firestore.rules     # Firestore security rules
+├── firebaseConfig.js   # Firebase client configuration
+└── package.json        # Dependencies and npm scripts
 ```
 
-> The repository may evolve as the application architecture grows; this structure reflects the current tracked project configuration.
-
----
-
-## 🚀 Getting Started
+## 🚀 Getting started
 
 ### Prerequisites
 
-Install the following before running the project locally:
+- [Node.js](https://nodejs.org/) and npm
+- [Git](https://git-scm.com/)
+- An Android emulator or physical Android device
+- [Android Studio](https://developer.android.com/studio) for native Android workflows
+- An Expo-compatible development environment
+- A Firebase project and a restricted Google Maps API key
 
-- **Node.js**
-- **npm**
-- **Git**
-- **Expo CLI / Expo toolchain**
-- **Android Studio** for native Android development/build workflows
-- A configured **Firebase project**
-- A configured **Google Maps API** for map functionality
-
-### 1. Clone the repository
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/tracolerd/Zero-Trap---Android-App.git
 cd Zero-Trap---Android-App
-```
-
-### 2. Install dependencies
-
-```bash
 npm install
 ```
 
-### 3. Configure Firebase and Google Maps
+### 2. Configure services
 
-Before running the app, configure the required Firebase and Maps credentials for your environment.
+Configure the Firebase project, Android app registration, authentication providers, Firestore database, and Google Maps API access required by your environment.
 
-Do **not** publish private credentials, service-account keys, or other secrets to a public repository. Use environment-specific configuration and secret management where appropriate.
+Keep environment-specific credentials outside version control. Never commit service-account keys, unrestricted API keys, or private Firebase Admin credentials.
 
-### 4. Start Expo
+### 3. Run the app
 
 ```bash
 npx expo start
 ```
 
-From there you can launch the project using an Android emulator/device or another supported Expo development workflow.
+Then press `a` to open an Android emulator, or scan the QR code with an appropriate Expo development client.
 
----
+> **Note:** Location, background tasks, notifications, camera access, and maps should be tested on a physical Android device. Emulator behavior may differ from production devices.
 
-## 🔥 Firebase Setup
+## 📜 Available commands
 
-Zero Trap uses Firebase for core cloud functionality, including authentication and Firestore-backed application data.
+| Command | Purpose |
+| --- | --- |
+| `npm start` | Start the Expo development server |
+| `npm run android` | Run the Android development workflow |
+| `npm run ios` | Run the iOS workflow where supported |
+| `npm run web` | Start the Expo web workflow |
+| `npm run purge:all-users` | Run the user-data purge utility — use with care |
 
-At a minimum, your Firebase setup should include:
+## 🔥 Firebase checklist
 
-1. A Firebase project.
-2. Firebase Authentication configured for the authentication flow used by the app.
-3. A Cloud Firestore database.
-4. Firestore security rules compatible with the app's data model.
-5. The appropriate Android application registration.
+Before using the app with real data:
 
-The project also includes `firestore.rules` so database access rules can be maintained alongside the application source code.
+1. Create or select a Firebase project.
+2. Register the Android application using package `com.zerotrap.emergency`.
+3. Configure the authentication providers used by the app.
+4. Create a Cloud Firestore database.
+5. Review and deploy [`firestore.rules`](firestore.rules).
+6. Restrict Google Maps and Firebase-related API access by platform and usage.
 
-### Security note
+Firebase client configuration values are not the same as server-side secrets, but they still require appropriate restrictions. Never publish Firebase Admin SDK private keys or service-account credentials.
 
-Firebase client configuration values are not automatically equivalent to secret credentials. However, **API keys, OAuth identifiers, Firebase configuration, and especially service-account credentials still need proper restriction and access controls**. Never commit Firebase Admin SDK private keys or other backend secrets.
+## 📦 Android builds with EAS
 
----
-
-## 🏗 Architecture
-
-At a high level, the application follows this flow:
-
-```text
-┌───────────────────────┐
-│   React Native App    │
-│       + Expo          │
-└───────────┬───────────┘
-            │
-    ┌───────┼────────┐
-    │       │        │
-    ▼       ▼        ▼
- Location  Auth   Notifications
-    │       │        │
-    └───────┼────────┘
-            ▼
-      Firebase Services
-       ┌────┴─────┐
-       │          │
-       ▼          ▼
- Firestore     Other Firebase
-  Data Store     Services
-```
-
-The application also uses local persistence through **AsyncStorage** for client-side state/session needs.
-
----
-
-## 📜 Available Scripts
-
-Defined in `package.json`:
+The repository includes development, preview, and production profiles in [`eas.json`](eas.json).
 
 ```bash
-npm start
-```
-Starts the Expo development server.
+# Authenticate with EAS
+npx eas login
 
-```bash
-npm run android
-```
-Runs the Android development workflow.
+# Configure EAS for the project
+npx eas build:configure
 
-```bash
-npm run ios
-```
-Runs the iOS development workflow where the environment supports it.
-
-```bash
-npm run web
-```
-Starts the Expo web workflow.
-
-```bash
-npm run purge:all-users
-```
-Runs the repository's user-data purge utility script. Use this only when you understand its purpose and consequences.
-
----
-
-## 📦 Android Build with EAS
-
-The repository includes `eas.json` for Expo Application Services workflows.
-
-### Login
-
-```bash
-eas login
+# Build an Android artifact
+npx eas build --platform android
 ```
 
-### Configure EAS
+Use the `preview` profile for an installable APK and the `production` profile for an Android App Bundle intended for release workflows.
 
-```bash
-eas build:configure
-```
+## 🔐 Permissions & privacy
 
-### Build Android
+Zero Trap requests permissions for:
 
-```bash
-eas build --platform android
-```
-
-Choose the appropriate EAS profile for your development or production workflow.
-
----
-
-## 🗺️ Permissions
-
-The Android configuration currently declares permissions related to:
-
-- Approximate and precise location
-- Background location
-- Camera
-- Photo/media access
+- Approximate and precise location, including background location
+- Camera and photo/media access
 - Notifications
-- Internet/network state
-- Wake lock
+- Internet, network state, and wake lock
 
-These permissions exist because Zero Trap depends on location-aware emergency functionality, communication, notifications, and profile media features.
-
----
+These permissions support the app's emergency, communication, notification, and profile features. Request only what the active experience needs, explain why it is needed, and review permission behavior on real devices before release.
 
 ## 🛣 Roadmap
 
@@ -286,69 +208,41 @@ These permissions exist because Zero Trap depends on location-aware emergency fu
 - [x] Expo notification integration
 - [ ] Refine push-notification delivery flows
 - [ ] Strengthen offline emergency communication
-- [ ] Expand volunteer reputation / achievement system
+- [ ] Expand the volunteer reputation and achievement system
 - [ ] Improve helper-request matching
 - [ ] Expand automated testing and CI coverage
-- [ ] Production hardening and security review
-
----
-
-## 🔐 Security
-
-Zero Trap handles sensitive functionality such as **location, authentication, communication, and emergency-related data**. Security should therefore be treated as a first-class part of the project.
-
-When contributing or deploying:
-
-- Never commit private API keys or service-account credentials.
-- Restrict cloud APIs by platform, application, and usage where possible.
-- Review Firestore rules before production deployment.
-- Minimize collection and retention of sensitive user data.
-- Test permission flows carefully on real Android devices.
-- Review third-party Firebase and Google Cloud configuration before release.
-
-For security vulnerabilities, please avoid publishing exploit details in a public issue. Contact the maintainer directly so the issue can be assessed responsibly.
-
----
+- [ ] Complete production hardening and security review
 
 ## 🤝 Contributing
 
-Contributions are welcome.
-
-### Typical workflow
+Contributions, bug reports, and thoughtful product ideas are welcome.
 
 ```bash
 git checkout -b feature/your-feature
-
 git add .
 git commit -m "feat: describe your change"
 git push origin feature/your-feature
 ```
 
-Then open a Pull Request against `main`.
-
-For bug fixes, use clear commit messages and include enough context for the change to be reviewed and reproduced.
-
----
+Open a pull request against `main` with a concise summary, testing notes, and screenshots for user-facing changes. For security vulnerabilities, please contact the maintainer privately instead of publishing exploit details in a public issue.
 
 ## 👨‍💻 Maintainer
 
-**Nurul Faiyaz**
-
-- GitHub: [@tracolerd](https://github.com/tracolerd)
-- LinkedIn: [faiyaz-xyz](https://www.linkedin.com/in/faiyaz-xyz)
-
----
+**Nurul Faiyaz** · [GitHub](https://github.com/tracolerd) · [LinkedIn](https://www.linkedin.com/in/faiyaz-xyz)
 
 ## 📄 License
 
-This project is distributed under the license included in the repository's [`LICENSE`](LICENSE) file.
-
----
+This project is distributed under the license included in [`LICENSE`](LICENSE).
 
 <div align="center">
 
-### Built with purpose for people who need help when it matters most. ❤️
+<br />
 
-⭐ **Star the repository if you find the project interesting.**
+**Built with purpose for people who need help when it matters most. ❤️**
+
+<br />
+<br />
+
+<a href="https://github.com/tracolerd/Zero-Trap---Android-App">⭐ Star the repository</a> if you find the project useful or interesting.
 
 </div>
