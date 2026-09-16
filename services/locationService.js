@@ -5,6 +5,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { updateUserLocation } from './firestoreService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth } from '../firebaseConfig';
 
 const LOCATION_TASK_NAME = 'background-location-task';
 const LOCATION_UPDATE_INTERVAL = 30000; // 30 seconds (balanced)
@@ -27,9 +28,9 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
     if (location) {
       try {
         // Get current user ID from storage
-        let userId = null;
+        let userId = auth.currentUser?.uid || null;
         const userDataStr = await AsyncStorage.getItem('currentUser');
-        if (userDataStr) {
+        if (!userId && userDataStr) {
           try {
             const userData = JSON.parse(userDataStr);
             userId = userData.userId || null;

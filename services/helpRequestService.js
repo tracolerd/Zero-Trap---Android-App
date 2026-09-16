@@ -5,7 +5,7 @@ import {
     getDoc,
     getDocs,
     updateDoc,
-    deleteDoc,
+    runTransaction,
     query,
     where,
     onSnapshot,
@@ -26,6 +26,7 @@ import {
         status: 'active', // active, accepted, completed, cancelled
         createdAt: new Date().toISOString(),
         helpers: [],
+        helperIds: [],
         messages: []
       });
       
@@ -43,7 +44,7 @@ import {
   };
   
   // Get active help requests (for searching)
-  export const getActiveHelpRequests = async (mode, currentLocation, maxDistance = 100) => {
+  export const getActiveHelpRequests = async (mode, currentLocation, maxDistanceMeters = 100) => {
     try {
       const q = query(
         collection(db, 'helpRequests'),
@@ -58,7 +59,7 @@ import {
         const data = doc.data();
         
         // Filter by distance for Bluetooth mode
-        if (mode === 'bluetooth' && currentLocation) {
+        if (mode === 'bluetooth' && currentLocation && data.location) {
           const distance = calculateDistance(
             currentLocation.latitude,
             currentLocation.longitude,
@@ -66,7 +67,7 @@ import {
             data.location.longitude
           );
           
-          if (distance <= maxDistance) {
+          if (distance <= maxDistanceMeters / 1000) {
             requests.push({
               ...data,
               distance: distance
@@ -92,7 +93,7 @@ import {
   };
   
   // Listen to help requests in real-time
-  export const subscribeToHelpRequests = (mode, currentLocation, callback, maxDistance = 100) => {
+  export const subscribeToHelpRequests = (mode, currentLocation, callback, maxDistanceMeters = 100) => {
     try {
       const q = query(
         collection(db, 'helpRequests'),
@@ -107,7 +108,7 @@ import {
           const data = doc.data();
           
           // Filter by distance for Bluetooth mode
-          if (mode === 'bluetooth' && currentLocation) {
+          if (mode === 'bluetooth' && currentLocation && data.location) {
             const distance = calculateDistance(
               currentLocation.latitude,
               currentLocation.longitude,
@@ -115,7 +116,7 @@ import {
               data.location.longitude
             );
             
-            if (distance <= maxDistance) {
+            if (distance <= maxDistanceMeters / 1000) {
               requests.push({
                 ...data,
                 distance: distance
@@ -140,20 +141,31 @@ import {
   export const acceptHelpRequest = async (requestId, helperData) => {
     try {
       const requestRef = doc(db, 'helpRequests', requestId);
-      const requestDoc = await getDoc(requestRef);
-      
-      if (!requestDoc.exists()) {
-        return {
-          success: false,
-          error: 'Request not found'
-        };
-      }
-      
-      const currentHelpers = requestDoc.data().helpers || [];
-      
-      await updateDoc(requestRef, {
-        helpers: [...currentHelpers, helperData],
-        status: 'accepted'
+      await runTransaction(db, async (transaction) => {
+        const requestDoc = await transaction.get(requestRef);
+        if (!requestDoc.exists()) {
+          throw new Error('Request not found');
+        }
+
+        const request = requestDoc.data();
+        const currentHelpers = request.helpers || [];
+        const helperId = helperData.userId || helperData.uid;
+        const alreadyHelping = helperId && currentHelpers.some(
+          (helper) => (helper.userId || helper.uid) === helperId
+        );
+
+        if (request.status !== 'active') {
+          throw new Error('This request is no longer active');
+        }
+        if (alreadyHelping) {
+          return;
+        }
+
+        transaction.update(requestRef, {
+          helpers: [...currentHelpers, helperData],
+          helperIds: [...(request.helperIds || []), helperId].filter(Boolean),
+          status: 'accepted'
+        });
       });
       
       return {
@@ -211,7 +223,10 @@ import {
   // Cancel help request
   export const cancelHelpRequest = async (requestId) => {
     try {
-      await deleteDoc(doc(db, 'helpRequests', requestId));
+      await updateDoc(doc(db, 'helpRequests', requestId), {
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString()
+      });
       
       return {
         success: true

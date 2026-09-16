@@ -68,56 +68,6 @@ export const isUserLoggedIn = async () => {
   }
 };
 
-// Login user
-export const loginUser = async (loginMethod, identifier, password) => {
-  try {
-    const userData = await getUserData();
-
-    if (!userData) {
-      return {
-        success: false,
-        error: 'কোনো account পাওয়া যায়নি। নতুন account তৈরি করুন।'
-      };
-    }
-
-    let identifierMatch = false;
-
-    if (loginMethod === 'phone') {
-      const inputNormalized = normalizePhone(identifier);
-      const savedNormalized = normalizePhone(userData.phoneNumber || '');
-      identifierMatch = inputNormalized === savedNormalized;
-    } else {
-      const inputEmail = identifier.toLowerCase().trim();
-      const savedEmail = (userData.email || '').toLowerCase().trim();
-      identifierMatch = inputEmail === savedEmail;
-    }
-
-    if (!identifierMatch) {
-      return {
-        success: false,
-        error: loginMethod === 'phone'
-          ? 'এই phone number দিয়ে কোনো account নেই'
-          : 'এই Gmail দিয়ে কোনো account নেই'
-      };
-    }
-
-    if (userData.password !== password) {
-      return {
-        success: false,
-        error: 'Password ভুল হয়েছে!'
-      };
-    }
-
-    const updatedData = { ...userData, isLoggedIn: true };
-    await saveUserData(updatedData);
-
-    return { success: true, userData: updatedData };
-
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-};
-
 // Debug storage
 export const debugStorage = async () => {
   try {

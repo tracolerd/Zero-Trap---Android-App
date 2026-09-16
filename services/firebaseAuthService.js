@@ -10,7 +10,7 @@ import {
   updateProfile,
   deleteUser
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from '../firebaseConfig';
 import { removePushToken } from './notificationService';
@@ -278,6 +278,8 @@ export const registerWithEmail = async (email, password, name, username, gender)
       console.error('❌ Registration error, rolling back...');
       
       try {
+        await deleteDoc(doc(db, 'usernames', cleanUsername));
+        await deleteDoc(doc(db, 'users', user.uid));
         await deleteUser(user);
         console.log('✅ Rollback complete');
       } catch (deleteError) {
@@ -353,7 +355,10 @@ export const signOut = async () => {
   try {
     const uid = auth.currentUser?.uid;
     if (uid) {
-      await removePushToken(uid).catch(() => {});
+      const tokenResult = await removePushToken(uid);
+      if (!tokenResult.success) {
+        console.warn('Push token cleanup failed during sign out:', tokenResult.error);
+      }
     }
     await firebaseSignOut(auth);
     
@@ -400,6 +405,10 @@ export const resetPassword = async (email) => {
   }
 };
 
+export const sendPasswordReset = resetPassword;
+export const validateGmail = (email) =>
+  typeof email === 'string' && email.toLowerCase().trim().endsWith('@gmail.com');
+
 // Delete account
 export const deleteAccount = async () => {
   try {
@@ -419,14 +428,13 @@ export const deleteAccount = async () => {
     const userSnap = await getDoc(userRef);
     const username = userSnap.exists() ? userSnap.data().username : null;
 
-    // Delete username document
+    const cleanupBatch = writeBatch(db);
     if (username) {
-      const usernameRef = doc(db, 'usernames', username);
-      await deleteDoc(usernameRef);
+      cleanupBatch.delete(doc(db, 'usernames', username));
     }
-
-    // Delete user profile
-    await deleteDoc(userRef);
+    cleanupBatch.delete(userRef);
+    cleanupBatch.delete(doc(db, 'liveLocations', userId));
+    await cleanupBatch.commit();
 
     // Delete from Firebase Auth
     await deleteUser(user);

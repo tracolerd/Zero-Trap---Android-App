@@ -12,11 +12,8 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { deleteUser } from 'firebase/auth';
-import { doc, deleteDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../firebaseConfig';
-import { getCurrentUserId, signOut } from '../services/firebaseAuthService';
+import { auth } from '../firebaseConfig';
+import { deleteAccount, getCurrentUserId } from '../services/firebaseAuthService';
 
 const SettingsScreen = ({ navigation }) => {
   const [deleting, setDeleting] = useState(false);
@@ -49,31 +46,10 @@ const SettingsScreen = ({ navigation }) => {
         return;
       }
 
-      // Get username before deleting
-      const userRef = doc(db, 'users', userId);
-      const userSnap = await getDoc(userRef);
-      const username = userSnap.exists() ? userSnap.data().username : null;
-
-      console.log('Deleting account:', userId, 'username:', username);
-
-      // 1. Delete username document
-      if (username) {
-        const usernameRef = doc(db, 'usernames', username);
-        await deleteDoc(usernameRef);
-        console.log('✅ Username document deleted');
+      const result = await deleteAccount();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete account');
       }
-
-      // 2. Delete user profile
-      await deleteDoc(userRef);
-      console.log('✅ User profile deleted');
-
-      // 3. Delete from Firebase Auth
-      await deleteUser(user);
-      console.log('✅ Auth user deleted');
-
-      // 4. Clear AsyncStorage
-      await AsyncStorage.clear();
-      console.log('✅ AsyncStorage cleared');
 
       // 5. Navigate to login
       Alert.alert(

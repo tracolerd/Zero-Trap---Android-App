@@ -39,6 +39,13 @@ async function main() {
     process.exit(1);
   }
 
+  if (process.env.NODE_ENV === 'production' && process.env.PURGE_ALLOW_PRODUCTION !== 'YES_I_UNDERSTAND') {
+    console.error(
+      'বাতিল: production ডাটা মুছতে PURGE_ALLOW_PRODUCTION=YES_I_UNDERSTAND আলাদাভাবে সেট করতে হবে।'
+    );
+    process.exit(1);
+  }
+
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     console.error('বাতিল: GOOGLE_APPLICATION_CREDENTIALS এ সার্ভিস অ্যাকাউন্ট JSON এর পাথ দাও।');
     process.exit(1);

@@ -337,6 +337,7 @@ export const createHelpRequest = async (userId, location, description = '') => {
       description: description,
       status: 'active',
       helpers: [],
+      helperIds: [],
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 3600000).toISOString() // 1 hour
     };
