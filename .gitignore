@@ -36,6 +36,7 @@ yarn-error.*
 # Firebase Admin (never commit)
 serviceAccount*.json
 *-firebase-adminsdk-*.json
+google-services.json
 
 # typescript
 *.tsbuildinfo
