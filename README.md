@@ -1,5 +1,7 @@
 <div align="center">
 
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:10151C,50:D97706,100:111827&height=180&section=header&text=Zero%20Trap&fontSize=44&fontColor=FFFFFF&fontAlignY=36&animation=fadeIn&desc=Emergency%20help%2C%20one%20tap%20away&descAlignY=60&descSize=16" alt="Zero Trap animated project banner" width="100%" />
+
 <img src="assets/icon.png" alt="Zero Trap logo" width="120" />
 
 # Zero Trap
@@ -236,3 +238,11 @@ This project is distributed under the license included in [`LICENSE`](LICENSE).
 <a href="https://github.com/tracolerd/Zero-Trap---Android-App">⭐ Star the repository</a> if you find the project useful.
 
 </div>
+
+---
+
+## Author & Development
+
+**Project author and solo developer:** [Nurul Faiyaz](https://github.com/tracolerd).
+
+This project is independently developed and maintained by Nurul Faiyaz. AI-assisted tools may be used as part of the development workflow; the project author remains responsible for technical decisions, code review, validation, and maintenance.
