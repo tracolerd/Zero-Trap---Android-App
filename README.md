@@ -263,3 +263,7 @@ This project is distributed under the license included in [`LICENSE`](LICENSE).
 </div>
 
 ---
+
+---
+
+<p align="center"><sub>Portfolio catalog · Project 12 of 22 · <a href="https://github.com/tracolerd">Nurul Faiyaz</a></sub></p>
